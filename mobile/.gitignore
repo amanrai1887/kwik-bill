@@ -1,0 +1,23 @@
+node_modules/
+.expo/
+dist/
+web-build/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+.env*.local
+.env
+*.log
+metro_log.txt
+
+# Android / iOS build folders & gradle cache
+android/app/build/
+android/.gradle/
+android/.gradle_home/
+android/build/
+ios/build/
+ios/Pods/
+.idea/

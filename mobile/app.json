@@ -1,0 +1,39 @@
+{
+  "expo": {
+    "name": "KwikBill Pro",
+    "slug": "kwikbill",
+    "version": "1.0.0",
+    "sdkVersion": "54.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#4f46e5"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.kwikbill.pro"
+    },
+    "android": {
+      "package": "com.kwikbill.pro",
+      "compileSdkVersion": 35,
+      "targetSdkVersion": 35
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-asset",
+      "expo-font"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "36667f3f-a732-42cd-b1b1-73762c9c7eb0"
+      }
+    },
+    "owner": "amanrai1887s-team"
+  }
+}
