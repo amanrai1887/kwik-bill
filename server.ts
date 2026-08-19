@@ -31,6 +31,37 @@ async function startServer() {
   // Global Middleware
   app.use(express.json());
 
+  // HTTP Request Logger Middleware with Method, Endpoint, Status Code, & Response Time
+  app.use((req, res, next) => {
+    // Only log API routes and ignore Vite HMR / internal asset noise
+    if (req.url.startsWith("/api") || req.url.startsWith("/pay")) {
+      const startTime = Date.now();
+      const timestamp = new Date().toLocaleTimeString("en-GB", { hour12: false });
+      const method = req.method.padEnd(6);
+
+      res.on("finish", () => {
+        const duration = Date.now() - startTime;
+        const status = res.statusCode;
+
+        // ANSI color codes
+        const cyan = "\x1b[36m";
+        const yellow = "\x1b[33m";
+        const green = "\x1b[32m";
+        const red = "\x1b[31m";
+        const reset = "\x1b[0m";
+        const gray = "\x1b[90m";
+
+        const statusColor = status >= 500 ? red : status >= 400 ? yellow : green;
+        const timeColor = duration > 500 ? red : duration > 200 ? yellow : gray;
+
+        console.log(
+          `${gray}[${timestamp}]${reset} ${cyan}${method}${reset} ${req.originalUrl} ${statusColor}${status}${reset} ${timeColor}${duration}ms${reset}`
+        );
+      });
+    }
+    next();
+  });
+
   // Mount Modular API Routes
   app.use("/api", apiRouter);
 

@@ -1,7 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants from 'expo-constants';
 
-// Defaults to current LAN IP so physical Android/iOS phones can communicate with Mac backend
-export const DEFAULT_API_BASE_URL = 'http://10.0.5.65:3000/api';
+// Priority: 1. EXPO_PUBLIC_API_URL (.env / EAS Secrets), 2. app.json extra.apiUrl, 3. Fallback
+export const DEFAULT_API_BASE_URL = 
+  process.env.EXPO_PUBLIC_API_URL || 
+  Constants.expoConfig?.extra?.apiUrl || 
+  'http://localhost:3000/api';
 
 
 const API_STORAGE_KEY = '@kwikbill_api_base_url';

@@ -55,7 +55,8 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
     : '';
 
   // Online Web Portal URL for public client view
-  const publicWebUrl = `http://10.151.216.173:3000/pay/${invoice.invoiceNumber}`;
+  const webBaseUrl = process.env.EXPO_PUBLIC_WEB_URL || 'http://10.0.5.65:3000';
+  const publicWebUrl = `${webBaseUrl.replace(/\/+$/, '')}/pay/${invoice.invoiceNumber}`;
 
   const generateMessage = () => {
     switch (templateType) {
