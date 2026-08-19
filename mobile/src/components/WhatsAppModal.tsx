@@ -10,11 +10,12 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
-import { X, Send, Zap, MessageSquare, Copy, Check, ShieldAlert, Sparkles } from 'lucide-react-native';
+import { X, Send, Zap, MessageSquare, Copy, Check, ShieldAlert, Sparkles, FileText, Share2 } from 'lucide-react-native';
 import * as Clipboard from 'expo-clipboard';
 import { Invoice, UserProfile, ClientRiskInfo } from '../types/index.ts';
 import { api } from '../api/endpoints.ts';
 import { getPlanLimits } from '../utils/planConfig.ts';
+import { generateAndShareInvoicePdf } from '../utils/invoicePdf.ts';
 
 interface WhatsAppModalProps {
   visible: boolean;
@@ -140,11 +141,24 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
     }
   };
 
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+
+  const handleSharePdfDirectly = async () => {
+    setIsGeneratingPdf(true);
+    try {
+      await generateAndShareInvoicePdf(invoice, profile);
+      if (onSentSuccess) onSentSuccess();
+    } catch (err: any) {
+      Alert.alert('PDF Sharing Failed', err.message || 'Could not generate PDF document');
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  };
+
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
-          {/* Header */}
           <View style={styles.header}>
             <View>
               <Text style={styles.headerTitle}>1-Click WhatsApp Engine</Text>
@@ -156,20 +170,48 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
           </View>
 
           <ScrollView style={styles.body} showsVerticalScrollIndicator={false}>
-            {/* AI Risk Score Pill if available */}
             {riskInfo && (
-              <View style={[
-                styles.aiRiskBadge,
-                riskInfo.riskLevel === 'high' ? styles.aiRiskHigh : riskInfo.riskLevel === 'medium' ? styles.aiRiskMed : styles.aiRiskLow
-              ]}>
-                <Sparkles size={12} color={riskInfo.riskLevel === 'high' ? '#ef4444' : riskInfo.riskLevel === 'medium' ? '#f59e0b' : '#10b981'} />
-                <Text style={styles.aiRiskText}>
-                  AI Risk Rating: {riskInfo.label} ({riskInfo.score}/100)
+              <View
+                style={[
+                  styles.aiRiskBadge,
+                  {
+                    backgroundColor:
+                      riskInfo.riskLevel === 'high'
+                        ? '#fff1f2'
+                        : riskInfo.riskLevel === 'medium'
+                        ? '#fffbeb'
+                        : '#f0fdf4',
+                  },
+                ]}
+              >
+                <ShieldAlert
+                  size={14}
+                  color={
+                    riskInfo.riskLevel === 'high'
+                      ? '#e11d48'
+                      : riskInfo.riskLevel === 'medium'
+                      ? '#d97706'
+                      : '#16a34a'
+                  }
+                />
+                <Text
+                  style={[
+                    styles.aiRiskText,
+                    {
+                      color:
+                        riskInfo.riskLevel === 'high'
+                          ? '#be123c'
+                          : riskInfo.riskLevel === 'medium'
+                          ? '#b45309'
+                          : '#15803d',
+                    },
+                  ]}
+                >
+                  AI Risk: {riskInfo.riskLevel.toUpperCase()} ({riskInfo.score}/100)
                 </Text>
               </View>
             )}
 
-            {/* Tone Selector */}
             <Text style={styles.label}>Select Escalation Tone</Text>
             <View style={styles.toneGrid}>
               {[
@@ -194,7 +236,6 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
               ))}
             </View>
 
-            {/* Delivery Gateway Toggle */}
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
               <Text style={styles.label}>Delivery Channel</Text>
               {!isPro && (
@@ -231,7 +272,6 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
               </TouchableOpacity>
             </View>
 
-            {/* Preview Bubble */}
             <View style={styles.previewHeader}>
               <Text style={styles.label}>Live Message & Payment Link Preview</Text>
               <TouchableOpacity onPress={handleCopy} style={styles.copyBtn}>
@@ -245,11 +285,25 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
             </View>
           </ScrollView>
 
-          {/* Footer Action */}
           <View style={styles.footer}>
             <TouchableOpacity
+              onPress={handleSharePdfDirectly}
+              disabled={isGeneratingPdf || isSending}
+              style={styles.pdfShareButton}
+            >
+              {isGeneratingPdf ? (
+                <ActivityIndicator color="#0f172a" />
+              ) : (
+                <>
+                  <FileText size={17} color="#0f172a" />
+                  <Text style={styles.pdfShareButtonText}>Attach & Send PDF File</Text>
+                </>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
               onPress={handleSend}
-              disabled={isSending}
+              disabled={isSending || isGeneratingPdf}
               style={styles.sendButton}
             >
               {isSending ? (
@@ -437,6 +491,23 @@ const styles = StyleSheet.create({
   },
   footer: {
     paddingHorizontal: 20,
+    gap: 10,
+  },
+  pdfShareButton: {
+    backgroundColor: '#f1f5f9',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 14,
+  },
+  pdfShareButtonText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0f172a',
   },
   sendButton: {
     backgroundColor: '#059669',

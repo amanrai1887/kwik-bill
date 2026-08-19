@@ -17,7 +17,7 @@ export async function sendReminder(req: AuthRequest, res: Response) {
   try {
     const userId = req.dbUser.id;
     const dbUser = req.dbUser;
-    const { invoiceId, clientId, templateType, messageContent, recipientPhone, sendMethod } = req.body;
+    const { invoiceId, clientId, templateType, messageContent, recipientPhone, sendMethod, pdfUrl, sendAsDocument } = req.body;
     
     // Clean phone number (format with 91 for Indian numbers if 10 digits)
     let cleanPhone = recipientPhone.replace(/[^0-9]/g, '');
@@ -36,22 +36,36 @@ export async function sendReminder(req: AuthRequest, res: Response) {
     if (sendMethod === 'direct' && whatsappToken && phoneNumberId) {
       try {
         const metaUrl = `https://graph.facebook.com/v19.0/${phoneNumberId}/messages`;
+
+        const isDocument = Boolean(pdfUrl || sendAsDocument);
+        const messagePayload: any = {
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to: cleanPhone,
+        };
+
+        if (isDocument && pdfUrl) {
+          messagePayload.type = 'document';
+          messagePayload.document = {
+            link: pdfUrl,
+            caption: messageContent,
+            filename: `Invoice_${invoiceId}.pdf`,
+          };
+        } else {
+          messagePayload.type = 'text';
+          messagePayload.text = {
+            preview_url: true,
+            body: messageContent,
+          };
+        }
+
         const metaRes = await fetch(metaUrl, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${whatsappToken}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({
-            messaging_product: 'whatsapp',
-            recipient_type: 'individual',
-            to: cleanPhone,
-            type: 'text',
-            text: {
-              preview_url: true,
-              body: messageContent,
-            },
-          }),
+          body: JSON.stringify(messagePayload),
         });
 
         const metaData = await metaRes.json();

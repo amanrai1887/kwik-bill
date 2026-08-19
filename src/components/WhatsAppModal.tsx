@@ -53,21 +53,22 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
 
   // UPI deep link
   const upiPayLink = `upi://pay?pa=${upiId}&pn=${encodeURIComponent(businessName)}&am=${balanceDue}&cu=INR&tn=${encodeURIComponent(`Invoice ${invoiceNumber}`)}`;
+  const publicInvoiceUrl = typeof window !== 'undefined' ? `${window.location.origin}/pay/${invoiceNumber}` : `https://kwikbill.com/pay/${invoiceNumber}`;
 
   // 4 Escalation Templates
   const getMessageTemplate = (type: TemplateType) => {
     switch (type) {
       case 'polite':
-        return `Hello *${clientName}* (${companyName || 'Business Partner'}),\n\nGreetings from *${businessName}*! ✨\n\nThis is a friendly reminder that Invoice *#${invoiceNumber}* for *${amountFormatted}* is scheduled for payment on *${dueDate}*.\n\n📱 *Instant UPI Payment Link:*\n${upiPayLink}\n\nThank you for your continued partnership!`;
+        return `Hello *${clientName}* (${companyName || 'Business Partner'}),\n\nGreetings from *${businessName}*! ✨\n\nThis is a friendly reminder that Invoice *#${invoiceNumber}* for *${amountFormatted}* is scheduled for payment on *${dueDate}*.\n\n📄 *View & Download PDF Invoice:*\n${publicInvoiceUrl}\n\n📱 *Instant UPI Payment Link:*\n${upiPayLink}\n\nThank you for your continued partnership!`;
 
       case 'standard':
-        return `Dear *${clientName}*,\n\nInvoice *#${invoiceNumber}* for *${amountFormatted}* is due for settlement on *${dueDate}*.\n\nKindly process the payment to ensure uninterrupted service delivery.\n\n💳 *Direct UPI ID:* \`${upiId}\`\n🔗 *Pay Instantly:* ${upiPayLink}\n\nPlease share the payment screenshot once transferred.\n\nRegards,\n*${businessName}*`;
+        return `Dear *${clientName}*,\n\nInvoice *#${invoiceNumber}* for *${amountFormatted}* is due for settlement on *${dueDate}*.\n\nKindly process the payment to ensure uninterrupted service delivery.\n\n📄 *View & Download PDF Invoice:*\n${publicInvoiceUrl}\n\n💳 *Direct UPI ID:* \`${upiId}\`\n🔗 *Pay Instantly:* ${upiPayLink}\n\nPlease share the payment screenshot once transferred.\n\nRegards,\n*${businessName}*`;
 
       case 'urgent':
-        return `⚠️ *URGENT PAYMENT REMINDER*\n\nDear *${clientName}*,\n\nWe noticed that payment for Invoice *#${invoiceNumber}* amounting to *${amountFormatted}* is currently overdue (Due date: *${dueDate}*).\n\nPlease settle this outstanding balance today to prevent any delay in ongoing shipments/services.\n\n⚡ *Instant UPI Settlement:* ${upiPayLink}\n\nThank you,\n*${businessName}*`;
+        return `⚠️ *URGENT PAYMENT REMINDER*\n\nDear *${clientName}*,\n\nWe noticed that payment for Invoice *#${invoiceNumber}* amounting to *${amountFormatted}* is currently overdue (Due date: *${dueDate}*).\n\n📄 *View & Download PDF Invoice:*\n${publicInvoiceUrl}\n\n⚡ *Instant UPI Settlement:* ${upiPayLink}\n\nPlease settle this outstanding balance today to prevent any delay in ongoing shipments/services.\n\nThank you,\n*${businessName}*`;
 
       case 'overdue':
-        return `🚨 *FINAL NOTICE: OVERDUE SETTLEMENT*\n\nAttention: *${clientName}* / *${companyName || 'Accounts Team'}*,\n\nDespite previous reminders, Invoice *#${invoiceNumber}* for *${amountFormatted}* remains unpaid.\n\nKindly clear the outstanding dues immediately via UPI or bank transfer to avoid late fee penalties or service hold.\n\n📌 *UPI ID:* \`${upiId}\`\n🔗 *Click to Pay:* ${upiPayLink}\n\n*${businessName} Accounts Department*`;
+        return `🚨 *FINAL NOTICE: OVERDUE SETTLEMENT*\n\nAttention: *${clientName}* / *${companyName || 'Accounts Team'}*,\n\nDespite previous reminders, Invoice *#${invoiceNumber}* for *${amountFormatted}* remains unpaid.\n\n📄 *Official GST PDF Invoice:*\n${publicInvoiceUrl}\n\n📌 *UPI ID:* \`${upiId}\`\n🔗 *Click to Pay:* ${upiPayLink}\n\nKindly clear the outstanding dues immediately via UPI or bank transfer to avoid late fee penalties or service hold.\n\n*${businessName} Accounts Department*`;
     }
   };
 
@@ -99,6 +100,7 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
         messageContent: currentMessage,
         recipientPhone: invoice.client?.phone || '',
         sendMethod,
+        pdfUrl: `${window.location.origin}/api/invoices/public/${invoice.invoiceNumber}`,
       });
 
       if (sendMethod === 'direct') {
