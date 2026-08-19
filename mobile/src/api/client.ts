@@ -32,6 +32,21 @@ export async function removeAuthToken(): Promise<void> {
   await AsyncStorage.removeItem(TOKEN_STORAGE_KEY);
 }
 
+export async function getFreshAuthToken(): Promise<string | null> {
+  try {
+    const { auth } = await import('./firebase.ts');
+    if (auth.currentUser) {
+      // Force refresh the token if it's nearing expiry or expired
+      const freshToken = await auth.currentUser.getIdToken(false);
+      await setAuthToken(freshToken);
+      return freshToken;
+    }
+  } catch (e) {
+    console.log('Error refreshing token from Firebase:', e);
+  }
+  return await getAuthToken();
+}
+
 export async function apiClient<T = any>(
   endpoint: string,
   options: {
@@ -40,7 +55,7 @@ export async function apiClient<T = any>(
   } = {}
 ): Promise<T> {
   const baseUrl = await getApiBaseUrl();
-  const token = await getAuthToken();
+  let token = await getFreshAuthToken();
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -52,11 +67,30 @@ export async function apiClient<T = any>(
 
   const url = `${baseUrl.replace(/\/+$/, '')}/${endpoint.replace(/^\/+/, '')}`;
 
-  const response = await fetch(url, {
+  let response = await fetch(url, {
     method: options.method || 'GET',
     headers,
     body: options.body ? JSON.stringify(options.body) : undefined,
   });
+
+  // If unauthorized / token expired, force refresh token from Firebase once and retry
+  if (response.status === 401) {
+    try {
+      const { auth } = await import('./firebase.ts');
+      if (auth.currentUser) {
+        token = await auth.currentUser.getIdToken(true);
+        await setAuthToken(token);
+        headers['Authorization'] = `Bearer ${token}`;
+        response = await fetch(url, {
+          method: options.method || 'GET',
+          headers,
+          body: options.body ? JSON.stringify(options.body) : undefined,
+        });
+      }
+    } catch (refreshErr) {
+      console.log('Failed to force refresh Firebase token:', refreshErr);
+    }
+  }
 
   const data = await response.json();
 

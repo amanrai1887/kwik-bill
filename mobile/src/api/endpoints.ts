@@ -84,6 +84,7 @@ export const api = {
     templateType: string;
     messageContent: string;
     recipientPhone: string;
+    sendMethod?: 'direct' | 'wa_me';
   }) => {
     return await apiClient('/reminders/send', {
       method: 'POST',

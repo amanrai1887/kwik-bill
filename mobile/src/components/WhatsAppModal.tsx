@@ -90,14 +90,19 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
     setIsSending(true);
     try {
       if (sendMode === 'direct') {
-        await api.sendWhatsAppReminder({
+        const res: any = await api.sendWhatsAppReminder({
           invoiceId: invoice.id,
           clientId: invoice.clientId,
           templateType,
           messageContent: messageText,
           recipientPhone: formattedPhone,
+          sendMethod: 'direct',
         });
-        Alert.alert('Reminder Dispatched', 'Automated WhatsApp reminder sent via Meta Cloud Gateway!');
+        if (res?.directApiSent) {
+          Alert.alert('Success', 'Automated WhatsApp reminder sent via Meta Cloud Gateway!');
+        } else {
+          Alert.alert('API Notice', res?.error || res?.apiResponse?.error?.message || 'Meta API credentials check failed. Please check token permissions.');
+        }
         if (onSentSuccess) onSentSuccess();
         onClose();
       } else {
@@ -107,6 +112,7 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
           templateType,
           messageContent: messageText,
           recipientPhone: formattedPhone,
+          sendMethod: 'wa_me',
         }).catch(() => {});
 
         const encodedMsg = encodeURIComponent(messageText);

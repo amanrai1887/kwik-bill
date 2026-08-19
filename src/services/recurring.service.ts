@@ -111,6 +111,59 @@ export async function processRecurringInvoices() {
         })
         .where(eq(recurringProfiles.id, p.id));
 
+      // If autoSendWhatsApp is enabled, send direct WhatsApp notification
+      if (p.autoSendWhatsApp && client.phone) {
+        const whatsappToken = merchant.whatsappApiToken || process.env.META_WHATSAPP_TOKEN;
+        const phoneNumberId = merchant.whatsappPhoneNumberId || process.env.META_PHONE_NUMBER_ID;
+
+        let cleanPhone = client.phone.replace(/[^0-9]/g, '');
+        if (cleanPhone.length === 10) {
+          cleanPhone = `91${cleanPhone}`;
+        }
+
+        const upiPayLink = merchant.upiId 
+          ? `upi://pay?pa=${merchant.upiId}&pn=${encodeURIComponent(merchant.businessName || 'Business')}&am=${p.totalAmount}&cu=INR&tn=${encodeURIComponent(`Invoice ${invNumber}`)}`
+          : '';
+
+        const messageContent = `Hello *${client.name}*,\n\nGreetings from *${merchant.businessName || 'Our Business'}*! ✨\n\nYour automated recurring Invoice *#${invNumber}* for *₹${p.totalAmount}* has been generated for *${issueDate}* (Due: *${dueDate}*).\n\n${upiPayLink ? `📲 *Instant UPI Payment:*\n${upiPayLink}\n\n` : ''}Thank you for your valued partnership!`;
+
+        let deliveryStatus = 'logged';
+
+        if (whatsappToken && phoneNumberId) {
+          try {
+            const metaUrl = `https://graph.facebook.com/v19.0/${phoneNumberId}/messages`;
+            const metaRes = await fetch(metaUrl, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${whatsappToken}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                messaging_product: 'whatsapp',
+                recipient_type: 'individual',
+                to: cleanPhone,
+                type: 'text',
+                text: { preview_url: true, body: messageContent },
+              }),
+            });
+
+            const metaData = await metaRes.json();
+            if (metaRes.ok && metaData.messages) {
+              deliveryStatus = 'delivered';
+              console.log(`[Auto-Billing Engine] WhatsApp message sent successfully to +${cleanPhone}`);
+            } else {
+              console.warn(`[Auto-Billing Engine] Meta WhatsApp Cloud API response error:`, JSON.stringify(metaData));
+              deliveryStatus = 'api_error';
+            }
+          } catch (apiErr) {
+            console.error(`[Auto-Billing Engine] Failed to dispatch automated WhatsApp message:`, apiErr);
+            deliveryStatus = 'api_error';
+          }
+        } else {
+          console.log(`[Auto-Billing Engine] WhatsApp credentials not found for user ${merchant.email}. Logged reminder locally.`);
+        }
+      }
+
       generatedInvoices.push({
         profileId: p.id,
         invoiceId: newInv.id,

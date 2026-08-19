@@ -12,7 +12,7 @@ export async function initializeDatabase() {
         uid TEXT NOT NULL UNIQUE,
         email TEXT NOT NULL,
         role TEXT NOT NULL DEFAULT 'subscriber',
-        businessName TEXT DEFAULT 'My Business',
+        business_name TEXT DEFAULT 'My Business',
         phone TEXT DEFAULT '',
         upi_id TEXT DEFAULT '',
         gstin TEXT DEFAULT '',
@@ -25,8 +25,15 @@ export async function initializeDatabase() {
       );
     `);
 
-    // Ensure role & trial & bank columns exist
+    // Ensure all columns exist and match schema
     await pool.query(`
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS business_name TEXT DEFAULT 'My Business';
+      DO $$
+      BEGIN
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'businessname') THEN
+          UPDATE users SET business_name = businessname WHERE business_name IS NULL OR business_name = 'My Business';
+        END IF;
+      END $$;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'subscriber';
       ALTER TABLE users ADD COLUMN IF NOT EXISTS trial_ends_at TIMESTAMP;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS bank_name TEXT DEFAULT '';
