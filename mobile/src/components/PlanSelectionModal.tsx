@@ -22,9 +22,11 @@ import {
   ShieldCheck,
   Phone,
   User,
+  CreditCard,
 } from 'lucide-react-native';
 import { api } from '../api/endpoints.ts';
 import { useMobileAuth } from '../context/AuthContext.tsx';
+import { RazorpayModal } from './RazorpayModal.tsx';
 
 interface PlanSelectionModalProps {
   visible: boolean;
@@ -49,7 +51,44 @@ export const PlanSelectionModal: React.FC<PlanSelectionModalProps> = ({
   const [businessNeeds, setBusinessNeeds] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Razorpay Checkout State
+  const [razorpayOrder, setRazorpayOrder] = useState<{
+    orderId: string;
+    keyId: string;
+    amountInPaise: number;
+    planName: string;
+    planId: string;
+  } | null>(null);
+  const [showRazorpayModal, setShowRazorpayModal] = useState(false);
+
   if (!visible) return null;
+
+  const handleRazorpayPay = async (plan: 'starter_299' | 'pro_499') => {
+    setIsSubmitting(true);
+    try {
+      const amountInRupees = plan === 'pro_499' ? 499 : 299;
+      const amountInPaise = amountInRupees * 100;
+      const planName = plan === 'pro_499' ? 'Pro Growth Plan (₹499/mo)' : 'Starter Plan (₹299/mo)';
+
+      const res = await api.createRazorpayOrder(amountInPaise, plan);
+      if (!res.success || !res.order_id) {
+        throw new Error('Failed to create Razorpay payment order');
+      }
+
+      setRazorpayOrder({
+        orderId: res.order_id,
+        keyId: res.key_id || process.env.EXPO_PUBLIC_RAZORPAY_KEY_ID || 'rzp_test_TReZcmt9KLYGJB',
+        amountInPaise,
+        planName,
+        planId: plan,
+      });
+      setShowRazorpayModal(true);
+    } catch (err: any) {
+      Alert.alert('Payment Initialization Failed', err.message || 'Could not connect to Razorpay');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const handleSubmit = async () => {
     if (selectedPlan === 'trial_15_days') {
@@ -289,38 +328,107 @@ export const PlanSelectionModal: React.FC<PlanSelectionModalProps> = ({
             )}
           </ScrollView>
 
-          {/* Action Button */}
+          {/* Action Buttons */}
           <View style={styles.footer}>
-            <TouchableOpacity
-              onPress={handleSubmit}
-              disabled={isSubmitting}
-              activeOpacity={0.85}
-            >
-              <LinearGradient
-                colors={['#4f46e5', '#6366f1']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.submitBtn}
+            {!showBusinessForm && selectedPlan !== 'trial_15_days' ? (
+              <View style={{ gap: 8 }}>
+                {/* Instant Online Payment via Razorpay */}
+                <TouchableOpacity
+                  onPress={() => handleRazorpayPay(selectedPlan as 'starter_299' | 'pro_499')}
+                  disabled={isSubmitting}
+                  activeOpacity={0.85}
+                >
+                  <LinearGradient
+                    colors={['#4f46e5', '#6366f1']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.submitBtn}
+                  >
+                    {isSubmitting ? (
+                      <ActivityIndicator color="#ffffff" />
+                    ) : (
+                      <>
+                        <CreditCard size={16} color="#ffffff" />
+                        <Text style={styles.submitBtnText}>
+                          {selectedPlan === 'pro_499'
+                            ? 'Pay ₹499 via Razorpay (Instant)'
+                            : 'Pay ₹299 via Razorpay (Instant)'}
+                        </Text>
+                        <ArrowRight size={16} color="#ffffff" />
+                      </>
+                    )}
+                  </LinearGradient>
+                </TouchableOpacity>
+
+                {/* Assisted Setup Option */}
+                <TouchableOpacity
+                  onPress={handleSubmit}
+                  disabled={isSubmitting}
+                  style={styles.secondaryBtn}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.secondaryBtnText}>Request Assisted Setup</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity
+                onPress={handleSubmit}
+                disabled={isSubmitting}
+                activeOpacity={0.85}
               >
-                {isSubmitting ? (
-                  <ActivityIndicator color="#ffffff" />
-                ) : (
-                  <>
-                    <Text style={styles.submitBtnText}>
-                      {showBusinessForm
-                        ? 'Confirm & Launch Workspace'
-                        : selectedPlan === 'trial_15_days'
-                        ? 'Start 15-Day Free Trial'
-                        : 'Continue to Setup'}
-                    </Text>
-                    <ArrowRight size={16} color="#ffffff" />
-                  </>
-                )}
-              </LinearGradient>
-            </TouchableOpacity>
+                <LinearGradient
+                  colors={['#4f46e5', '#6366f1']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.submitBtn}
+                >
+                  {isSubmitting ? (
+                    <ActivityIndicator color="#ffffff" />
+                  ) : (
+                    <>
+                      <Text style={styles.submitBtnText}>
+                        {showBusinessForm
+                          ? 'Confirm & Launch Workspace'
+                          : 'Start 15-Day Free Trial'}
+                      </Text>
+                      <ArrowRight size={16} color="#ffffff" />
+                    </>
+                  )}
+                </LinearGradient>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       </View>
+
+      {/* Razorpay In-App Payment Sheet */}
+      {razorpayOrder && (
+        <RazorpayModal
+          visible={showRazorpayModal}
+          orderId={razorpayOrder.orderId}
+          keyId={razorpayOrder.keyId}
+          amountInPaise={razorpayOrder.amountInPaise}
+          planName={razorpayOrder.planName}
+          planId={razorpayOrder.planId}
+          userEmail={user?.email || ''}
+          userName={user?.ownerName || user?.businessName || 'Subscriber'}
+          userPhone={user?.phone || ''}
+          onClose={() => setShowRazorpayModal(false)}
+          onSuccess={async (res) => {
+            setShowRazorpayModal(false);
+            await refreshProfile();
+            Alert.alert(
+              '🎉 Plan Activated',
+              `Your ${razorpayOrder.planName} is now active!`
+            );
+            if (onPlanUpdated) onPlanUpdated();
+            onClose();
+          }}
+          onError={(errMsg) => {
+            Alert.alert('Payment Error', errMsg);
+          }}
+        />
+      )}
     </Modal>
   );
 };
@@ -552,5 +660,19 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '800',
     color: '#ffffff',
+  },
+  secondaryBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: 14,
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  secondaryBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#475569',
   },
 });

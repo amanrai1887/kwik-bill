@@ -7,6 +7,8 @@ services:
     restart: unless-stopped
     ports:
       - "3000:3000"
+    env_file:
+      - .env
     environment:
       - NODE_ENV=production
       - PORT=3000
@@ -15,6 +17,10 @@ services:
       - SQL_USER=postgres
       - SQL_PASSWORD=postgres
       - SQL_DB_NAME=invoice_saas
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/invoice_saas
+      - RAZORPAY_KEY_ID=${RAZORPAY_KEY_ID:-rzp_test_TReZcmt9KLYGJB}
+      - RAZORPAY_KEY_SECRET=${RAZORPAY_KEY_SECRET:-7FStZMDU6584xYp6O0Zav65d}
+      - VITE_RAZORPAY_KEY_ID=${VITE_RAZORPAY_KEY_ID:-rzp_test_TReZcmt9KLYGJB}
     depends_on:
       postgres:
         condition: service_healthy

@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext.tsx';
 import { submitPlanRequestApi } from '../lib/api.ts';
+import { launchRazorpayCheckout } from '../lib/razorpay.ts';
 
 interface PlanSelectionModalProps {
   isOpen: boolean;
@@ -138,6 +139,38 @@ export const PlanSelectionModal: React.FC<PlanSelectionModalProps> = ({
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  const handleInstantRazorpayPayment = async () => {
+    if (selectedTier === 'trial_15_days') {
+      handleNextOrSubmit();
+      return;
+    }
+
+    const amountInRupees = selectedTier === 'pro_499' ? 499 : 299;
+    const planName = selectedTier === 'pro_499' ? 'Pro Growth Plan (₹499/mo)' : 'Starter Plan (₹299/mo)';
+
+    setIsProcessing(true);
+    await launchRazorpayCheckout({
+      amountInPaise: amountInRupees * 100,
+      planId: selectedTier,
+      planName,
+      userEmail: user?.email || email || '',
+      userName: user?.displayName || contactName || 'Subscriber',
+      userPhone: contactPhone || '',
+      onSuccess: async (verifyRes) => {
+        setIsProcessing(false);
+        await onSelectPlan(selectedTier);
+        onClose();
+      },
+      onError: (errMsg) => {
+        setIsProcessing(false);
+        alert(`Payment Error: ${errMsg}`);
+      },
+      onDismiss: () => {
+        setIsProcessing(false);
+      },
+    });
   };
 
   return (
@@ -543,26 +576,45 @@ export const PlanSelectionModal: React.FC<PlanSelectionModalProps> = ({
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-slate-100">
           <div className="flex items-center gap-2 text-xs text-slate-500">
             <ShieldCheck className="w-4 h-4 text-emerald-600" />
-            <span>Tenant isolation with administrative support</span>
+            <span>Secure 256-bit encrypted Razorpay checkout</span>
           </div>
 
-          <button
-            onClick={handleNextOrSubmit}
-            disabled={isProcessing}
-            id="plan-modal-continue-btn"
-            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-8 py-3.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm shadow-md shadow-indigo-600/30 transition-all hover:scale-[1.02] disabled:opacity-50 cursor-pointer"
-          >
-            <span>
-              {isProcessing
-                ? 'Processing...'
-                : showBusinessDetailsForm
-                ? 'Submit Details & Launch Workspace'
-                : selectedTier === 'trial_15_days'
-                ? 'Start 15-Day Free Trial'
-                : 'Continue to Business Setup'}
-            </span>
-            <ArrowRight className="w-4 h-4" />
-          </button>
+          <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto justify-end">
+            {!showBusinessDetailsForm && selectedTier !== 'trial_15_days' && (
+              <button
+                type="button"
+                onClick={handleNextOrSubmit}
+                disabled={isProcessing}
+                className="px-4 py-3 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-xs transition-all cursor-pointer"
+              >
+                Request Assisted Setup
+              </button>
+            )}
+
+            <button
+              onClick={
+                !showBusinessDetailsForm && selectedTier !== 'trial_15_days'
+                  ? handleInstantRazorpayPayment
+                  : handleNextOrSubmit
+              }
+              disabled={isProcessing}
+              id="plan-modal-continue-btn"
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-7 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm shadow-md shadow-indigo-600/30 transition-all hover:scale-[1.02] disabled:opacity-50 cursor-pointer"
+            >
+              <span>
+                {isProcessing
+                  ? 'Processing...'
+                  : showBusinessDetailsForm
+                  ? 'Submit Details & Launch Workspace'
+                  : selectedTier === 'trial_15_days'
+                  ? 'Start 15-Day Free Trial'
+                  : selectedTier === 'pro_499'
+                  ? 'Pay ₹499 via Razorpay (Instant)'
+                  : 'Pay ₹299 via Razorpay (Instant)'}
+              </span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       </div>
     </div>

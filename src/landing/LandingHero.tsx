@@ -29,8 +29,8 @@ export const LandingHero: React.FC<LandingHeroProps> = ({ onLaunchDemo, onSelect
 
           {/* Subtitle */}
           <p className="mt-6 text-base sm:text-lg text-slate-600 leading-relaxed max-w-2xl mx-auto">
-            The automated invoicing & recurring revenue platform for 
-            <strong className="text-slate-900 font-semibold"> Transport Fleets, Agencies, Gyms, Institutes & Freelancers</strong>. 
+            The automated invoicing & recurring revenue platform for
+            <strong className="text-slate-900 font-semibold"> Transport Fleets, Agencies, Gyms, Institutes & Freelancers</strong>.
             Auto-generate recurring contracts, deliver instant public payment links, and trigger 1-click WhatsApp alerts with zero friction.
           </p>
 

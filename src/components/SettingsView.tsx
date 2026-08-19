@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { IndustryType, SubscriptionPlan, UserProfile, InvoiceTemplate } from '../lib/types.ts';
 import { InvoiceRenderer } from './InvoiceRenderer.tsx';
+import { RazorpayCheckoutButton } from './RazorpayCheckoutButton.tsx';
 
 interface SettingsViewProps {
   profile: UserProfile | null;
@@ -436,53 +437,96 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ profile, onUpdatePro
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-sm font-bold text-slate-900 dark:text-white">Subscription Tier Plan</h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400">Switch between Starter (₹299/mo) and Pro (₹499/mo)</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Upgrade or renew with Razorpay Standard Checkout (UPI, Cards, NetBanking)</p>
             </div>
-            <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-100 uppercase">
-              Active Plan
+            <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-100 dark:border-indigo-800 uppercase">
+              Current: {subscriptionPlan === 'pro_499' ? 'Pro Plan' : subscriptionPlan === 'starter_299' ? 'Starter Plan' : '15-Day Trial'}
             </span>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {/* Starter ₹299 */}
             <div
-              onClick={() => setSubscriptionPlan('starter_299')}
-              className={`p-4 rounded-xl border cursor-pointer transition-all ${
+              className={`p-4 rounded-xl border flex flex-col justify-between transition-all ${
                 subscriptionPlan === 'starter_299'
-                  ? 'bg-indigo-50/50 border-indigo-600 ring-2 ring-indigo-600/20'
+                  ? 'bg-indigo-50/50 dark:bg-indigo-950/20 border-indigo-600 ring-2 ring-indigo-600/20'
                   : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'
               }`}
             >
-              <div className="flex justify-between items-center mb-2">
-                <span className="font-bold text-slate-900 dark:text-white">Starter Plan</span>
-                <span className="font-bold font-mono text-indigo-600">₹299 / month</span>
+              <div>
+                <div className="flex justify-between items-center mb-2">
+                  <span className="font-bold text-slate-900 dark:text-white">Starter Plan</span>
+                  <span className="font-bold font-mono text-indigo-600 dark:text-indigo-400">₹299 / month</span>
+                </div>
+                <p className="text-slate-500 text-[11px] mb-3">
+                  Standard GST invoicing, UPI QR codes & 1-click wa.me reminders.
+                </p>
+                <div className="space-y-1.5 text-slate-700 dark:text-slate-300 text-[11px] mb-4">
+                  <div className="flex items-center gap-1.5">
+                    <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" /> Unlimited GST Invoices + Direct UPI QR
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" /> WhatsApp Payment Reminders
+                  </div>
+                </div>
               </div>
-              <p className="text-slate-500 text-[11px] mb-3">
-                Standard GST invoicing, UPI QR codes & 1-click wa.me reminders.
-              </p>
-              <div className="flex items-center gap-1.5 text-slate-700 dark:text-slate-300 text-[11px]">
-                <Check className="w-3.5 h-3.5 text-emerald-600" /> Unlimited GST Invoices + Direct UPI QR
+
+              <div className="pt-2 border-t border-slate-100 dark:border-slate-700/60">
+                <RazorpayCheckoutButton
+                  planId="starter_299"
+                  planName="Starter Plan"
+                  amountInRupees={299}
+                  buttonText={subscriptionPlan === 'starter_299' ? 'Renew Starter (₹299)' : 'Pay ₹299 via Razorpay'}
+                  className="w-full bg-slate-900 hover:bg-slate-800 dark:bg-indigo-600 dark:hover:bg-indigo-700 text-white"
+                  onPaymentSuccess={async (res) => {
+                    setSubscriptionPlan('starter_299');
+                    await onUpdateProfile({ subscriptionPlan: 'starter_299', subscriptionStatus: 'active' });
+                  }}
+                />
               </div>
             </div>
 
             {/* Pro ₹499 */}
             <div
-              onClick={() => setSubscriptionPlan('pro_499')}
-              className={`p-4 rounded-xl border cursor-pointer transition-all ${
+              className={`p-4 rounded-xl border flex flex-col justify-between relative transition-all ${
                 subscriptionPlan === 'pro_499'
-                  ? 'bg-indigo-50/50 border-indigo-600 ring-2 ring-indigo-600/20'
+                  ? 'bg-indigo-50/50 dark:bg-indigo-950/20 border-indigo-600 ring-2 ring-indigo-600/20'
                   : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'
               }`}
             >
-              <div className="flex justify-between items-center mb-2">
-                <span className="font-bold text-slate-900 dark:text-white">Pro Growth Plan</span>
-                <span className="font-bold font-mono text-indigo-600">₹499 / month</span>
+              <div>
+                <div className="flex justify-between items-center mb-2">
+                  <span className="font-bold text-slate-900 dark:text-white flex items-center gap-1">
+                    <span>Pro Growth Plan</span>
+                    <span className="px-1.5 py-0.2 text-[9px] font-black uppercase bg-indigo-600 text-white rounded">Popular</span>
+                  </span>
+                  <span className="font-bold font-mono text-indigo-600 dark:text-indigo-400">₹499 / month</span>
+                </div>
+                <p className="text-slate-500 text-[11px] mb-3">
+                  All 6 custom templates, Auto-Billing Recurring Cron, 4-Tier WhatsApp escalations.
+                </p>
+                <div className="space-y-1.5 text-slate-700 dark:text-slate-300 text-[11px] mb-4">
+                  <div className="flex items-center gap-1.5">
+                    <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" /> 6 Pro Templates + Auto WhatsApp & Recurring
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" /> Meta Cloud Direct API Gateway
+                  </div>
+                </div>
               </div>
-              <p className="text-slate-500 text-[11px] mb-3">
-                All 6 custom templates, Auto-Billing Recurring Cron, 4-Tier WhatsApp escalations.
-              </p>
-              <div className="flex items-center gap-1.5 text-slate-700 dark:text-slate-300 text-[11px]">
-                <Check className="w-3.5 h-3.5 text-emerald-600" /> 6 Pro Templates + Auto WhatsApp & Recurring
+
+              <div className="pt-2 border-t border-slate-100 dark:border-slate-700/60">
+                <RazorpayCheckoutButton
+                  planId="pro_499"
+                  planName="Pro Growth Plan"
+                  amountInRupees={499}
+                  buttonText={subscriptionPlan === 'pro_499' ? 'Renew Pro (₹499)' : 'Upgrade to Pro (₹499)'}
+                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white"
+                  onPaymentSuccess={async (res) => {
+                    setSubscriptionPlan('pro_499');
+                    await onUpdateProfile({ subscriptionPlan: 'pro_499', subscriptionStatus: 'active' });
+                  }}
+                />
               </div>
             </div>
           </div>

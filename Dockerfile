@@ -12,6 +12,9 @@ RUN npm install
 # Copy source files
 COPY . .
 
+ARG VITE_RAZORPAY_KEY_ID=rzp_test_TReZcmt9KLYGJB
+ENV VITE_RAZORPAY_KEY_ID=$VITE_RAZORPAY_KEY_ID
+
 # Build Vite frontend & server bundle
 RUN npm run build
 

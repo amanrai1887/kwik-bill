@@ -305,6 +305,46 @@ export async function triggerManualRecurringRun() {
   return res.json();
 }
 
+// Razorpay Order Creation API
+export async function createRazorpayOrderApi(amountInPaise: number, planId?: string, notes?: Record<string, any>) {
+  const headers = await getAuthHeaders();
+  const res = await fetch('/api/create-order', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      amount: amountInPaise,
+      currency: 'INR',
+      planId,
+      notes,
+    }),
+  });
+  const data = await res.json();
+  if (!res.ok || !data.success) {
+    throw new Error(data.error || 'Failed to create Razorpay payment order');
+  }
+  return data;
+}
+
+// Razorpay Payment Signature Verification API
+export async function verifyRazorpayPaymentApi(payload: {
+  razorpay_order_id: string;
+  razorpay_payment_id: string;
+  razorpay_signature: string;
+  planId?: string;
+}) {
+  const headers = await getAuthHeaders();
+  const res = await fetch('/api/verify-payment', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json();
+  if (!res.ok || !data.success) {
+    throw new Error(data.error || 'Payment signature verification failed');
+  }
+  return data;
+}
+
 
 
 

@@ -1,9 +1,11 @@
 export type IndustryType = 'transport' | 'agency' | 'freelancer' | 'consultant' | 'gym' | 'coaching' | 'retail' | 'general';
+export type SubscriptionPlan = 'trial_15_days' | 'starter_299' | 'pro_499';
 
 export interface UserProfile {
   id: number;
   uid: string;
   email: string;
+  role?: string;
   businessName: string;
   ownerName?: string;
   phone?: string;
@@ -15,7 +17,7 @@ export interface UserProfile {
   bankIfsc?: string;
   upiId?: string;
   industryType: IndustryType;
-  subscriptionPlan: 'trial_15_days' | 'starter_299' | 'pro_499';
+  subscriptionPlan: SubscriptionPlan;
   subscriptionStatus: 'trial' | 'active' | 'expired' | 'inactive';
   whatsappPhoneNumberId?: string;
   whatsappApiToken?: string;

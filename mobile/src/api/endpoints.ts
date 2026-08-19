@@ -147,6 +147,41 @@ export const api = {
   triggerManualRecurringRun: async () => {
     return await apiClient<{ success: boolean; result?: { count: number; generated: any[] } }>('/recurring/trigger-run', { method: 'POST' });
   },
+
+  // Razorpay Checkout
+  createRazorpayOrder: async (amountInPaise: number, planId?: string) => {
+    return await apiClient<{
+      success: boolean;
+      order_id: string;
+      amount: number;
+      currency: string;
+      key_id: string;
+    }>('/create-order', {
+      method: 'POST',
+      body: {
+        amount: amountInPaise,
+        currency: 'INR',
+        planId,
+      },
+    });
+  },
+
+  verifyRazorpayPayment: async (payload: {
+    razorpay_order_id: string;
+    razorpay_payment_id: string;
+    razorpay_signature: string;
+    planId?: string;
+  }) => {
+    return await apiClient<{
+      success: boolean;
+      message: string;
+      payment_id?: string;
+      user?: any;
+    }>('/verify-payment', {
+      method: 'POST',
+      body: payload,
+    });
+  },
 };
 
 
