@@ -1,0 +1,19 @@
+import { initializeApp, getApps } from 'firebase/app';
+import { getAuth, GoogleAuthProvider } from 'firebase/auth';
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBvZ8MgdIoAnAma5YeEsZ-xM6NCmK9KwEg",
+  authDomain: "invoice-saas-app-fc503.firebaseapp.com",
+  projectId: "invoice-saas-app-fc503",
+  storageBucket: "invoice-saas-app-fc503.firebasestorage.app",
+  messagingSenderId: "254610968957",
+  appId: "1:254610968957:web:e18fcbe1c3ef84395ebc14",
+  measurementId: "G-6QZB89ZQ4C"
+};
+
+const app = !getApps().length ? initializeApp(firebaseConfig) : getApps()[0];
+export const auth = getAuth(app);
+export const googleAuthProvider = new GoogleAuthProvider();
+
+
+
