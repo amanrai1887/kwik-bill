@@ -47,12 +47,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
     user?.email?.toLowerCase() === 'arai.343531@gmail.com' ||
     profile?.email?.toLowerCase() === 'arai.343531@gmail.com';
 
+  const isPro = profile?.subscriptionPlan === 'pro_499' || isSuperAdmin;
+
   const navItems = isSuperAdmin
     ? [{ id: 'admin', label: 'Company & Subscription Directory', icon: ShieldCheck, highlight: true }]
     : [
         { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
         { id: 'invoices', label: 'Invoices & Dues', icon: FileText },
-        { id: 'recurring', label: 'Recurring Auto-Billing', icon: Repeat },
+        { id: 'recurring', label: 'Recurring Auto-Billing', icon: Repeat, proOnly: !isPro },
         { id: 'clients', label: 'Client Directory', icon: Users },
         { id: 'reminders', label: 'WhatsApp Logs', icon: MessageSquare },
         { id: 'reports', label: 'Monthly Reports', icon: BarChart3 },
@@ -134,14 +136,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 key={item.id}
                 onClick={() => onTabChange(item.id as AppTab)}
                 id={`sidebar-tab-${item.id}`}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                   isActive
                     ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 font-bold border border-indigo-100 dark:border-indigo-800/80 shadow-2xs'
                     : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
-                <Icon className={`w-4 h-4 ${isActive ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500'}`} />
-                <span>{item.label}</span>
+                <div className="flex items-center gap-3">
+                  <Icon className={`w-4 h-4 ${isActive ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500'}`} />
+                  <span>{item.label}</span>
+                </div>
+                {item.proOnly && (
+                  <span className="px-1.5 py-0.5 text-[9px] font-extrabold bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded uppercase tracking-wider shadow-2xs">
+                    PRO
+                  </span>
+                )}
               </button>
             );
           })}

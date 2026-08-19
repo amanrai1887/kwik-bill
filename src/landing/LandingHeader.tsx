@@ -35,13 +35,11 @@ export const LandingHeader: React.FC<LandingHeaderProps> = ({ onLaunchDemo, onSe
 
         {/* Navigation Links */}
         <nav className="hidden md:flex items-center gap-7 text-sm font-medium text-slate-600">
-          <a href="#target-industries" className="hover:text-indigo-600 transition-colors">Target Industries</a>
           <a href="#features" className="hover:text-indigo-600 transition-colors">Core Features</a>
           <a href="#mobile-app" className="hover:text-indigo-600 transition-colors flex items-center gap-1 text-indigo-600 font-semibold">
             <span>Mobile App</span>
             <span className="px-1.5 py-0.2 text-[9px] bg-emerald-100 text-emerald-700 font-bold rounded">New</span>
           </a>
-          <a href="#calculator" className="hover:text-indigo-600 transition-colors">MRR Calculator</a>
           <a href="#pricing" className="hover:text-indigo-600 transition-colors">Pricing (₹299/₹499)</a>
         </nav>
 

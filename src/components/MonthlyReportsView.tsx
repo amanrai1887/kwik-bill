@@ -11,14 +11,19 @@ import {
   Percent,
   Receipt
 } from 'lucide-react';
-import { AnalyticsData, Invoice } from '../lib/types.ts';
+import { AnalyticsData, Invoice, UserProfile } from '../lib/types.ts';
+import { getPlanLimits } from '../lib/planConfig.ts';
 
 interface MonthlyReportsViewProps {
   analytics: AnalyticsData | null;
   invoices: Invoice[];
+  profile?: UserProfile | null;
+  onUpgrade?: () => void;
 }
 
-export const MonthlyReportsView: React.FC<MonthlyReportsViewProps> = ({ analytics, invoices }) => {
+export const MonthlyReportsView: React.FC<MonthlyReportsViewProps> = ({ analytics, invoices, profile, onUpgrade }) => {
+  const planLimits = getPlanLimits(profile || null);
+  const isPro = planLimits.canExportGstr1Reports;
   const trendData = analytics?.trendData || [];
   const metrics = analytics?.metrics || {
     totalInvoiced: 0,
@@ -64,6 +69,11 @@ export const MonthlyReportsView: React.FC<MonthlyReportsViewProps> = ({ analytic
   };
 
   const handleExportGstr1Json = () => {
+    if (!isPro) {
+      alert('GSTR-1 JSON Portal-Ready export is a Pro Plan feature. Upgrade to Pro (₹499/mo) to download automated government portal filings.');
+      if (onUpgrade) onUpgrade();
+      return;
+    }
 
     const b2bInvoices = invoices.map(inv => ({
       ctin: inv.client?.gstin || 'URP',
@@ -118,10 +128,15 @@ export const MonthlyReportsView: React.FC<MonthlyReportsViewProps> = ({ analytic
         <div className="flex flex-wrap items-center gap-2.5">
           <button
             onClick={handleExportGstr1Json}
-            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs sm:text-sm shadow-sm transition hover:scale-[1.02]"
+            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs sm:text-sm shadow-sm transition hover:scale-[1.02] cursor-pointer"
           >
             <Receipt className="w-4 h-4" />
             <span>GSTR-1 JSON (GST Portal Ready)</span>
+            {!isPro && (
+              <span className="px-1.5 py-0.2 text-[9px] font-black bg-emerald-950/80 text-emerald-200 border border-emerald-400/40 rounded uppercase">
+                PRO
+              </span>
+            )}
           </button>
 
           <button

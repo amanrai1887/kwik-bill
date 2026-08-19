@@ -17,6 +17,7 @@ import {
   Share2,
   ChevronRight
 } from 'lucide-react';
+import { InvoiceRenderer } from './InvoiceRenderer.tsx';
 
 export const PublicInvoicePayView: React.FC<{ invoiceNumberFromProp?: string }> = ({ invoiceNumberFromProp }) => {
   const [invoiceNumber, setInvoiceNumber] = useState<string>(() => {

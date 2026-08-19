@@ -450,6 +450,8 @@ function AppContent() {
               {activeTab === 'recurring' && (
                 <RecurringInvoicesView
                   clients={clients}
+                  profile={profile}
+                  onUpgrade={() => setIsPlanModalOpen(true)}
                   onCreateRecurring={() => setIsCreateInvoiceOpen(true)}
                 />
               )}
@@ -477,7 +479,12 @@ function AppContent() {
               )}
 
               {activeTab === 'reports' && (
-                <MonthlyReportsView analytics={analytics} invoices={invoices} />
+                <MonthlyReportsView
+                  analytics={analytics}
+                  invoices={invoices}
+                  profile={profile}
+                  onUpgrade={() => setIsPlanModalOpen(true)}
+                />
               )}
 
               {activeTab === 'settings' && (

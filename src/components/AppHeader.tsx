@@ -84,6 +84,26 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
           </div>
         )}
 
+        {/* Current Plan Status Badge */}
+        {!isSuperAdmin && profile && (
+          <div className={`hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border ${
+            profile.subscriptionPlan === 'pro_499'
+              ? 'bg-purple-50 dark:bg-purple-950/60 text-purple-800 dark:text-purple-300 border-purple-200 dark:border-purple-800'
+              : profile.subscriptionPlan === 'starter_299'
+              ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-800 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800'
+              : 'bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-800'
+          }`}>
+            <span className="w-1.5 h-1.5 rounded-full bg-current" />
+            <span>
+              {profile.subscriptionPlan === 'pro_499'
+                ? 'Pro Growth (₹499)'
+                : profile.subscriptionPlan === 'starter_299'
+                ? 'Starter (₹299)'
+                : '15-Day Free Trial'}
+            </span>
+          </div>
+        )}
+
         {/* Public landing link */}
         <button
           onClick={onViewLanding}

@@ -740,35 +740,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ profile, onUpdatePro
           </div>
         </div>
       )}
-
-      {/* Danger Zone: Clean Slate Reset */}
-      <div className="bg-rose-50/60 p-5 sm:p-6 rounded-2xl border border-rose-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-sm font-bold text-rose-900">Clean Slate Workspace Reset</h2>
-          <p className="text-xs text-rose-700 mt-0.5">
-            Wipe all demo/mock clients, invoices, payments, and WhatsApp logs to start with a fresh ₹0 clean dashboard.
-          </p>
-        </div>
-
-        <button
-          type="button"
-          onClick={async () => {
-            if (confirm('Are you sure you want to wipe all invoices, clients, payments, and reminder logs to make your workspace 100% clean and fresh?')) {
-              try {
-                const { resetWorkspace } = await import('../lib/api.ts');
-                await resetWorkspace();
-                alert('Workspace successfully reset to a clean ₹0 state!');
-                window.location.reload();
-              } catch (err: any) {
-                alert('Failed to reset workspace: ' + err.message);
-              }
-            }
-          }}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer shrink-0"
-        >
-          <span>Wipe & Clean Workspace</span>
-        </button>
-      </div>
     </div>
   );
 };

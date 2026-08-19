@@ -16,7 +16,8 @@ import {
   Zap,
   ArrowUpRight
 } from 'lucide-react';
-import { RecurringProfile, Client } from '../lib/types.ts';
+import { RecurringProfile, Client, UserProfile } from '../lib/types.ts';
+import { getPlanLimits } from '../lib/planConfig.ts';
 import {
   fetchRecurringProfiles,
   toggleRecurringProfile,
@@ -26,13 +27,19 @@ import {
 
 interface RecurringInvoicesViewProps {
   clients: Client[];
+  profile?: UserProfile | null;
+  onUpgrade?: () => void;
   onCreateRecurring: () => void;
 }
 
 export const RecurringInvoicesView: React.FC<RecurringInvoicesViewProps> = ({
   clients,
+  profile,
+  onUpgrade,
   onCreateRecurring,
 }) => {
+  const planLimits = getPlanLimits(profile || null);
+  const isPro = planLimits.canUseRecurringBilling;
   const [profiles, setProfiles] = useState<RecurringProfile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isTriggering, setIsTriggering] = useState(false);
@@ -143,6 +150,38 @@ export const RecurringInvoicesView: React.FC<RecurringInvoicesViewProps> = ({
           </button>
         </div>
       </div>
+
+      {/* PRO PLAN RESTRICTION BANNER IF NOT PRO */}
+      {!isPro && (
+        <div className="p-6 rounded-3xl bg-gradient-to-br from-purple-950 via-indigo-950 to-slate-900 border-2 border-purple-500/40 text-white shadow-xl flex flex-col md:flex-row items-center justify-between gap-5 relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-80 h-80 bg-purple-500/10 rounded-full blur-3xl pointer-events-none" />
+          <div className="flex items-start gap-4 relative z-10">
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-purple-500 to-indigo-600 text-white flex items-center justify-center shrink-0 shadow-lg shadow-purple-600/30">
+              <Sparkles className="w-6 h-6" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-base font-extrabold text-white">Pro Plan Feature: Automated Auto-Billing</span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-purple-500/30 text-purple-300 border border-purple-400/40 uppercase">
+                  Locked
+                </span>
+              </div>
+              <p className="text-xs text-indigo-200/80 max-w-2xl leading-relaxed">
+                Recurring automated billing is exclusively available on the <strong>Pro Growth Plan (₹499/mo)</strong>. Upgrade to auto-generate weekly/monthly retainer invoices and dispatch instant WhatsApp alerts in the background.
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={onUpgrade}
+            className="inline-flex items-center gap-2 px-6 py-3 rounded-2xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs shadow-lg shadow-purple-600/30 transition-all hover:scale-[1.02] cursor-pointer shrink-0 relative z-10"
+          >
+            <Sparkles className="w-4 h-4" />
+            <span>Upgrade to Pro (₹499/mo)</span>
+          </button>
+        </div>
+      )}
 
       {triggerMessage && (
         <div className="p-4 rounded-2xl bg-indigo-50 border border-indigo-200 text-indigo-900 text-xs font-semibold flex items-center justify-between">

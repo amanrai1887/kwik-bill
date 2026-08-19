@@ -14,6 +14,7 @@ import { X, Send, Zap, MessageSquare, Copy, Check, ShieldAlert, Sparkles } from 
 import * as Clipboard from 'expo-clipboard';
 import { Invoice, UserProfile, ClientRiskInfo } from '../types/index.ts';
 import { api } from '../api/endpoints.ts';
+import { getPlanLimits } from '../utils/planConfig.ts';
 
 interface WhatsAppModalProps {
   visible: boolean;
@@ -32,11 +33,13 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
   riskInfo,
   onSentSuccess,
 }) => {
+  const planLimits = getPlanLimits(profile);
+  const isPro = planLimits.canUseEscalationTemplates;
   const [templateType, setTemplateType] = useState<'friendly' | 'due_today' | 'urgent' | 'final_legal'>(
     riskInfo?.riskLevel === 'high' ? 'urgent' : 'friendly'
   );
   const [sendMode, setSendMode] = useState<'wa_me' | 'direct'>(
-    profile?.whatsappPhoneNumberId && profile?.whatsappApiToken ? 'direct' : 'wa_me'
+    profile?.whatsappPhoneNumberId && profile?.whatsappApiToken && isPro ? 'direct' : 'wa_me'
   );
   const [isSending, setIsSending] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -192,7 +195,14 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
             </View>
 
             {/* Delivery Gateway Toggle */}
-            <Text style={styles.label}>Delivery Channel</Text>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+              <Text style={styles.label}>Delivery Channel</Text>
+              {!isPro && (
+                <Text style={{ fontSize: 10, fontWeight: '700', color: '#7c3aed' }}>
+                  Direct API unlocked in PRO
+                </Text>
+              )}
+            </View>
             <View style={styles.channelRow}>
               <TouchableOpacity
                 onPress={() => setSendMode('wa_me')}
@@ -205,12 +215,18 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
               </TouchableOpacity>
 
               <TouchableOpacity
-                onPress={() => setSendMode('direct')}
+                onPress={() => {
+                  if (!isPro && !profile?.whatsappPhoneNumberId) {
+                    Alert.alert('Pro Feature', '1-Click Direct Background API sending is available on the Pro Growth Plan (₹499/mo). Please upgrade or use Native WhatsApp app.');
+                    return;
+                  }
+                  setSendMode('direct');
+                }}
                 style={[styles.channelBtn, sendMode === 'direct' && styles.channelBtnActive]}
               >
                 <Zap size={16} color={sendMode === 'direct' ? '#ffffff' : '#475569'} />
                 <Text style={[styles.channelText, sendMode === 'direct' && styles.channelTextActive]}>
-                  1-Click Direct API
+                  1-Click Direct API {!isPro && '(PRO)'}
                 </Text>
               </TouchableOpacity>
             </View>

@@ -1,0 +1,86 @@
+import { SubscriptionPlan, UserProfile } from './types.ts';
+
+export interface PlanLimits {
+  name: string;
+  badge: string;
+  badgeColor: string;
+  price: string;
+  // Features & limits
+  maxInvoicesPerMonth: number; // Infinity for unlimited
+  maxClients: number;
+  canUseRecurringBilling: boolean;
+  canUseWhatsAppDirectApi: boolean; // Direct background API gateway vs manual wa.me
+  canExportGstr1Reports: boolean;
+  canUseTransportModule: boolean; // LR, Vehicle No, POD
+  canUseEscalationTemplates: boolean; // Urgent / Overdue legal escalation templates
+  canUseCustomTemplates: boolean; // 6 designer invoice templates & custom brand colors
+}
+
+export const PLAN_CONFIG: Record<SubscriptionPlan, PlanLimits> = {
+  trial_15_days: {
+    name: '15-Day Free Trial',
+    badge: '15-Day Trial',
+    badgeColor: 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800',
+    price: '₹0',
+    maxInvoicesPerMonth: 25,
+    maxClients: 10,
+    canUseRecurringBilling: false,
+    canUseWhatsAppDirectApi: false,
+    canExportGstr1Reports: false,
+    canUseTransportModule: true,
+    canUseEscalationTemplates: false,
+    canUseCustomTemplates: false,
+  },
+  starter_299: {
+    name: 'Starter Plan (₹299/mo)',
+    badge: 'Starter',
+    badgeColor: 'bg-indigo-100 dark:bg-indigo-950/60 text-indigo-800 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800',
+    price: '₹299/mo',
+    maxInvoicesPerMonth: Infinity,
+    maxClients: Infinity,
+    canUseRecurringBilling: false,
+    canUseWhatsAppDirectApi: false,
+    canExportGstr1Reports: false,
+    canUseTransportModule: true,
+    canUseEscalationTemplates: false,
+    canUseCustomTemplates: true,
+  },
+  pro_499: {
+    name: 'Pro Growth Plan (₹499/mo)',
+    badge: 'Pro Growth',
+    badgeColor: 'bg-purple-100 dark:bg-purple-950/60 text-purple-800 dark:text-purple-300 border-purple-200 dark:border-purple-800',
+    price: '₹499/mo',
+    maxInvoicesPerMonth: Infinity,
+    maxClients: Infinity,
+    canUseRecurringBilling: true,
+    canUseWhatsAppDirectApi: true,
+    canExportGstr1Reports: true,
+    canUseTransportModule: true,
+    canUseEscalationTemplates: true,
+    canUseCustomTemplates: true,
+  },
+};
+
+export function getPlanLimits(profile: UserProfile | null): PlanLimits {
+  if (!profile) return PLAN_CONFIG.trial_15_days;
+  if (profile.role === 'superadmin' || profile.email?.toLowerCase() === 'arai.343531@gmail.com') {
+    return PLAN_CONFIG.pro_499;
+  }
+  const plan = profile.subscriptionPlan || 'trial_15_days';
+  return PLAN_CONFIG[plan] || PLAN_CONFIG.trial_15_days;
+}
+
+export function isPlanExpired(profile: UserProfile | null): boolean {
+  if (!profile) return false;
+  if (profile.role === 'superadmin' || profile.email?.toLowerCase() === 'arai.343531@gmail.com') {
+    return false;
+  }
+  if (profile.subscriptionStatus === 'expired' || profile.subscriptionStatus === 'inactive') {
+    return true;
+  }
+  if (profile.subscriptionPlan === 'trial_15_days' && profile.trialEndsAt) {
+    const expiry = new Date(profile.trialEndsAt).getTime();
+    return Date.now() > expiry;
+  }
+  return false;
+}

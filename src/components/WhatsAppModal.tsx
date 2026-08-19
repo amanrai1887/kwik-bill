@@ -14,7 +14,7 @@ import {
   Zap
 } from 'lucide-react';
 import { Invoice, UserProfile } from '../lib/types.ts';
-
+import { getPlanLimits } from '../lib/planConfig.ts';
 
 interface WhatsAppModalProps {
   isOpen: boolean;
@@ -35,6 +35,8 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
 }) => {
   if (!isOpen || !invoice) return null;
 
+  const planLimits = getPlanLimits(profile);
+  const isPro = planLimits.canUseEscalationTemplates;
   const [templateType, setTemplateType] = useState<TemplateType>('standard');
   const [copied, setCopied] = useState(false);
   const [isLogging, setIsLogging] = useState(false);
@@ -167,19 +169,32 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
-                onClick={() => setSendMethod('direct')}
-                className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                onClick={() => {
+                  if (!isPro && !profile?.whatsappPhoneNumberId) {
+                    alert('1-Click Direct Meta API background sending is a Pro Plan feature. Upgrade to Pro (₹499/mo) or configure Meta API credentials in Settings.');
+                    return;
+                  }
+                  setSendMethod('direct');
+                }}
+                className={`p-3 rounded-xl border text-left transition-all cursor-pointer relative ${
                   sendMethod === 'direct'
                     ? 'bg-emerald-50 border-emerald-600 ring-2 ring-emerald-600/20 text-emerald-900'
                     : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
                 }`}
               >
-                <div className="font-bold text-xs flex items-center gap-1.5">
-                  <Zap className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>1-Click Direct Send</span>
+                <div className="font-bold text-xs flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <Zap className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>1-Click Direct Send</span>
+                  </div>
+                  {!isPro && (
+                    <span className="px-1.5 py-0.2 text-[9px] font-extrabold bg-purple-100 text-purple-700 rounded uppercase">
+                      PRO
+                    </span>
+                  )}
                 </div>
                 <p className="text-[10px] text-slate-500 mt-1">
-                  Sends in the background instantly without opening WhatsApp app
+                  Sends in the background instantly via Meta API
                 </p>
               </button>
 
@@ -197,7 +212,7 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
                   <span>Open via wa.me</span>
                 </div>
                 <p className="text-[10px] text-slate-500 mt-1">
-                  Opens WhatsApp Web or Mobile app to review and send manually
+                  Opens WhatsApp Web or Mobile app to review and send
                 </p>
               </button>
             </div>
@@ -205,9 +220,17 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
 
           {/* 4 Escalation Tiers */}
           <div>
-            <label className="font-bold text-slate-700 uppercase tracking-wider text-[11px] block mb-2">
-              Select Reminder Escalation Tier:
-            </label>
+            <div className="flex items-center justify-between mb-2">
+              <label className="font-bold text-slate-700 uppercase tracking-wider text-[11px] block">
+                Select Reminder Escalation Tier:
+              </label>
+              {!isPro && (
+                <span className="text-[10px] text-purple-600 font-bold flex items-center gap-1">
+                  <Sparkles className="w-3 h-3" />
+                  Urgent & Overdue tiers unlocked in PRO
+                </span>
+              )}
+            </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               <button
                 type="button"
@@ -237,27 +260,45 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
 
               <button
                 type="button"
-                onClick={() => setTemplateType('urgent')}
+                onClick={() => {
+                  if (!isPro) {
+                    alert('Urgent legal escalation template is a Pro Plan feature. Upgrade to Pro (₹499/mo) to unlock.');
+                    return;
+                  }
+                  setTemplateType('urgent');
+                }}
                 className={`p-2.5 rounded-xl border text-center font-bold text-xs transition-all cursor-pointer ${
                   templateType === 'urgent'
                     ? 'bg-amber-50 border-amber-500 text-amber-800 ring-2 ring-amber-400/20'
                     : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
                 }`}
               >
-                <div>3. Urgent</div>
+                <div className="flex items-center justify-center gap-1">
+                  <span>3. Urgent</span>
+                  {!isPro && <span className="text-[8px] bg-purple-100 text-purple-700 px-1 rounded font-bold">PRO</span>}
+                </div>
                 <span className="text-[10px] font-normal text-slate-500">3-7 Days Late</span>
               </button>
 
               <button
                 type="button"
-                onClick={() => setTemplateType('overdue')}
+                onClick={() => {
+                  if (!isPro) {
+                    alert('Final Legal Overdue notice template is a Pro Plan feature. Upgrade to Pro (₹499/mo) to unlock.');
+                    return;
+                  }
+                  setTemplateType('overdue');
+                }}
                 className={`p-2.5 rounded-xl border text-center font-bold text-xs transition-all cursor-pointer ${
                   templateType === 'overdue'
                     ? 'bg-rose-50 border-rose-500 text-rose-800 ring-2 ring-rose-400/20'
                     : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
                 }`}
               >
-                <div>4. Overdue</div>
+                <div className="flex items-center justify-center gap-1">
+                  <span>4. Overdue</span>
+                  {!isPro && <span className="text-[8px] bg-purple-100 text-purple-700 px-1 rounded font-bold">PRO</span>}
+                </div>
                 <span className="text-[10px] font-normal text-slate-500">Final Hold</span>
               </button>
             </div>

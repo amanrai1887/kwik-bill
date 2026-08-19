@@ -26,8 +26,13 @@ import {
 } from 'lucide-react-native';
 import { api } from '../api/endpoints.ts';
 import { RecurringProfile } from '../types/index.ts';
+import { useMobileAuth } from '../context/AuthContext.tsx';
+import { getPlanLimits } from '../utils/planConfig.ts';
 
 export const RecurringScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
+  const { user } = useMobileAuth();
+  const planLimits = getPlanLimits(user);
+  const isPro = planLimits.canUseRecurringBilling;
   const [profiles, setProfiles] = useState<RecurringProfile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -150,6 +155,26 @@ export const RecurringScreen: React.FC<{ navigation: any }> = ({ navigation }) =
             </View>
           </View>
         </LinearGradient>
+
+        {/* PRO PLAN RESTRICTION BANNER IF NOT PRO */}
+        {!isPro && (
+          <View style={styles.proLockCard}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+              <Sparkles size={16} color="#c084fc" />
+              <Text style={styles.proLockTitle}>PRO PLAN FEATURE: AUTO-BILLING</Text>
+            </View>
+            <Text style={styles.proLockDesc}>
+              Automated recurring billing schedules and automatic WhatsApp alerts are exclusive to the Pro Growth Plan (₹499/mo).
+            </Text>
+            <TouchableOpacity
+              style={styles.proUpgradeBtn}
+              onPress={() => navigation.navigate('Settings')}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.proUpgradeText}>Upgrade to Pro in Settings (₹499/mo)</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* Action Trigger Buttons */}
         <View style={styles.actionRow}>
@@ -496,6 +521,39 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#334155',
     marginTop: 10,
+  },
+  proLockCard: {
+    marginHorizontal: 16,
+    marginTop: 12,
+    padding: 14,
+    backgroundColor: '#1e1b4b',
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: '#7c3aed',
+  },
+  proLockTitle: {
+    fontSize: 11,
+    fontWeight: '900',
+    color: '#e9d5ff',
+    letterSpacing: 0.5,
+  },
+  proLockDesc: {
+    fontSize: 11,
+    color: '#c7d2fe',
+    lineHeight: 16,
+    marginBottom: 10,
+  },
+  proUpgradeBtn: {
+    backgroundColor: '#7c3aed',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  proUpgradeText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#ffffff',
   },
   emptySub: {
     fontSize: 11.5,

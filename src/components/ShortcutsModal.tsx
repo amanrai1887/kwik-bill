@@ -14,7 +14,7 @@ export const ShortcutsModal: React.FC<ShortcutsModalProps> = ({ isOpen, onClose 
     { key: 'D', desc: 'Go to Live Workspace Dashboard' },
     { key: 'I', desc: 'Go to Tax Invoices Ledger' },
     { key: 'R', desc: 'Go to Auto-Billing Recurring Hub' },
-    { key: 'C', desc: 'Go to Client Directory & Ledger' },
+    { key: 'K', desc: 'Go to Client Directory & Ledger' },
     { key: 'S', desc: 'Go to Settings & Branding Studio' },
     { key: '/', desc: 'Focus Quick Search Bar' },
     { key: '?', desc: 'Show this Keyboard Shortcuts cheat-sheet' },

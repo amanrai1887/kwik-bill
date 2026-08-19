@@ -28,6 +28,9 @@ export const useKeyboardShortcuts = ({
 
       if (isInputActive) return;
 
+      // Never hijack system modifier shortcuts (Ctrl+C, Cmd+C, Alt, etc.)
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+
       const key = e.key.toLowerCase();
 
       if (key === 'n' && onNewInvoice) {
@@ -42,7 +45,7 @@ export const useKeyboardShortcuts = ({
       } else if (key === 'r' && onNavigate) {
         e.preventDefault();
         onNavigate('recurring');
-      } else if (key === 'c' && onNavigate) {
+      } else if (key === 'k' && onNavigate) {
         e.preventDefault();
         onNavigate('clients');
       } else if (key === 's' && onNavigate) {
