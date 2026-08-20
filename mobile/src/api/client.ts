@@ -12,6 +12,9 @@ const API_STORAGE_KEY = '@kwikbill_api_base_url';
 const TOKEN_STORAGE_KEY = '@kwikbill_auth_token';
 
 export async function getApiBaseUrl(): Promise<string> {
+  if (process.env.EXPO_PUBLIC_API_URL) {
+    return process.env.EXPO_PUBLIC_API_URL;
+  }
   try {
     const saved = await AsyncStorage.getItem(API_STORAGE_KEY);
     return saved || DEFAULT_API_BASE_URL;
