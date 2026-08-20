@@ -14,9 +14,17 @@ declare global {
 export const createPool = () => {
   if (!global._postgresPool) {
     const connectionString = process.env.DATABASE_URL;
+    const isSsl =
+      process.env.DB_SSL === 'true' ||
+      (connectionString && connectionString.includes('supabase.co')) ||
+      (process.env.SQL_HOST && process.env.SQL_HOST.includes('supabase.co'));
+
+    const sslConfig = isSsl ? { rejectUnauthorized: false } : undefined;
+
     if (connectionString) {
       global._postgresPool = new Pool({
         connectionString,
+        ssl: sslConfig,
         max: 10,
         connectionTimeoutMillis: 15000,
       });
@@ -27,6 +35,7 @@ export const createPool = () => {
         user: process.env.SQL_USER || 'postgres',
         password: process.env.SQL_PASSWORD || 'postgres',
         database: process.env.SQL_DB_NAME || 'invoice_saas',
+        ssl: sslConfig,
         max: 10,
         connectionTimeoutMillis: 15000,
       });
@@ -45,3 +54,4 @@ const pool = createPool();
 
 // Initialize Drizzle with the pool and schema.
 export const db = drizzle(pool, { schema });
+

@@ -22,18 +22,28 @@ if (!password) {
   throw new Error("SQL_ADMIN_PASSWORD or SQL_PASSWORD must be set in environment variables.");
 }
 
+const isSsl =
+  process.env.DB_SSL === "true" ||
+  sqlHost?.includes("supabase") ||
+  process.env.DATABASE_URL?.includes("supabase");
+
 export default defineConfig({
   schema: "./src/db/schema.ts",
   out: "./drizzle",
   dialect: "postgresql",
   schemaFilter: ["public"],
-  dbCredentials: {
-    host: sqlHost,
-    port: sqlPort,
-    user: user,
-    password: password,
-    database: sqlDbName,
-    ssl: false,
-  },
+  dbCredentials: process.env.DATABASE_URL
+    ? {
+        url: process.env.DATABASE_URL,
+        ssl: isSsl ? { rejectUnauthorized: false } : false,
+      }
+    : {
+        host: sqlHost || "localhost",
+        port: sqlPort,
+        user: user || "postgres",
+        password: password || "postgres",
+        database: sqlDbName || "postgres",
+        ssl: isSsl ? { rejectUnauthorized: false } : false,
+      },
   verbose: true,
 });

@@ -1,0 +1,27 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: invoice-reminder-app-cloud
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - SQL_HOST=aws-0-ap-northeast-1.pooler.supabase.com
+      - SQL_PORT=5432
+      - SQL_USER=postgres.cbilwealslnuolosfwcn
+      - SQL_PASSWORD=Amanrai@123
+      - SQL_DB_NAME=postgres
+      - DATABASE_URL=postgresql://postgres.cbilwealslnuolosfwcn:Amanrai%40123@aws-0-ap-northeast-1.pooler.supabase.com:5432/postgres
+      - DB_SSL=true
+      - RAZORPAY_KEY_ID=${RAZORPAY_KEY_ID:-rzp_test_TReZcmt9KLYGJB}
+      - RAZORPAY_KEY_SECRET=${RAZORPAY_KEY_SECRET:-7FStZMDU6584xYp6O0Zav65d}
+      - VITE_RAZORPAY_KEY_ID=${VITE_RAZORPAY_KEY_ID:-rzp_test_TReZcmt9KLYGJB}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - META_WHATSAPP_TOKEN=${META_WHATSAPP_TOKEN:-}
+      - META_PHONE_NUMBER_ID=${META_PHONE_NUMBER_ID:-}
+      - APP_URL=${APP_URL:-http://localhost:3000}
+      - FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID:-invoice-saas-app-fc503}
