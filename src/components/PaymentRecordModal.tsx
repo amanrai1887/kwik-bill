@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { X, CreditCard, IndianRupee, CheckCircle2, Sparkles } from 'lucide-react';
 import { Invoice } from '../lib/types.ts';
 import { triggerPaymentCelebration } from '../utils/confetti.ts';
+import { toast } from '../context/ToastContext.tsx';
 
 interface PaymentRecordModalProps {
   isOpen: boolean;
@@ -32,7 +33,7 @@ export const PaymentRecordModal: React.FC<PaymentRecordModalProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (amount <= 0) {
-      alert('Payment amount must be greater than 0');
+      toast.warning('Payment amount must be greater than ₹0', 'Invalid Amount');
       return;
     }
 
@@ -48,9 +49,10 @@ export const PaymentRecordModal: React.FC<PaymentRecordModalProps> = ({
       });
       // 🎉 Trigger celebratory confetti on payment recording!
       triggerPaymentCelebration();
+      toast.success(`Recorded ₹${amount.toLocaleString('en-IN')} payment for #${invoice.invoiceNumber}`, 'Payment Recorded');
       onClose();
     } catch (err: any) {
-      alert(err.message || 'Failed to record payment');
+      toast.error(err.message || 'Failed to record payment', 'Payment Error');
     } finally {
       setIsSubmitting(false);
     }

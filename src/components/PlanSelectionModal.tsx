@@ -22,6 +22,7 @@ import {
 import { useAuth } from '../lib/AuthContext.tsx';
 import { submitPlanRequestApi } from '../lib/api.ts';
 import { launchRazorpayCheckout } from '../lib/razorpay.ts';
+import { toast } from '../context/ToastContext.tsx';
 
 interface PlanSelectionModalProps {
   isOpen: boolean;
@@ -95,9 +96,10 @@ export const PlanSelectionModal: React.FC<PlanSelectionModalProps> = ({
       setIsProcessing(true);
       try {
         await onSelectPlan('trial_15_days');
+        toast.success('Your 15-day full Pro trial has been activated!', 'Trial Activated');
         onClose();
       } catch (err: any) {
-        alert(err.message || 'Failed to start trial');
+        toast.error(err.message || 'Failed to start trial', 'Activation Error');
       } finally {
         setIsProcessing(false);
       }
@@ -112,7 +114,7 @@ export const PlanSelectionModal: React.FC<PlanSelectionModalProps> = ({
 
     // 4. Submit Business Needs Request to SuperAdmin
     if (!bizName || !contactName || !contactPhone) {
-      alert('Please fill in Company Name, Contact Person, and Phone number.');
+      toast.warning('Please fill in Company Name, Contact Person, and Phone number.', 'Required Fields');
       return;
     }
 
@@ -131,11 +133,12 @@ export const PlanSelectionModal: React.FC<PlanSelectionModalProps> = ({
       // Grant trial/preview access while Admin provisions account
       await onSelectPlan(selectedTier);
       setRequestSubmitted(true);
+      toast.success('Plan request submitted to Admin. Workspace provisioned!', 'Request Sent');
       setTimeout(() => {
         onClose();
       }, 2000);
     } catch (err: any) {
-      alert(err.message || 'Failed to submit plan request');
+      toast.error(err.message || 'Failed to submit plan request', 'Request Error');
     } finally {
       setIsProcessing(false);
     }
@@ -161,11 +164,12 @@ export const PlanSelectionModal: React.FC<PlanSelectionModalProps> = ({
       onSuccess: async (verifyRes) => {
         setIsProcessing(false);
         await onSelectPlan(selectedTier);
+        toast.success(`Successfully upgraded to ${planName}!`, 'Payment Confirmed');
         onClose();
       },
       onError: (errMsg) => {
         setIsProcessing(false);
-        alert(`Payment Error: ${errMsg}`);
+        toast.error(`Payment Error: ${errMsg}`, 'Payment Failed');
       },
       onDismiss: () => {
         setIsProcessing(false);

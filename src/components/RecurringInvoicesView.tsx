@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { RecurringProfile, Client, UserProfile } from '../lib/types.ts';
 import { getPlanLimits } from '../lib/planConfig.ts';
+import { toast } from '../context/ToastContext.tsx';
 import {
   fetchRecurringProfiles,
   toggleRecurringProfile,
@@ -66,19 +67,20 @@ export const RecurringInvoicesView: React.FC<RecurringInvoicesViewProps> = ({
   const handleToggle = async (id: number) => {
     try {
       await toggleRecurringProfile(id);
+      toast.success('Recurring schedule status updated.', 'Schedule Updated');
       loadData();
     } catch (err: any) {
-      alert(err.message || 'Failed to update schedule status');
+      toast.error(err.message || 'Failed to update schedule status', 'Update Failed');
     }
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm('Are you sure you want to stop and delete this recurring billing profile?')) return;
     try {
       await deleteRecurringProfile(id);
+      toast.success('Recurring billing profile deleted.', 'Profile Removed');
       loadData();
     } catch (err: any) {
-      alert(err.message || 'Failed to delete recurring profile');
+      toast.error(err.message || 'Failed to delete recurring profile', 'Delete Failed');
     }
   };
 

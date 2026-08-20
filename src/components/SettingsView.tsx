@@ -23,6 +23,7 @@ import { IndustryType, SubscriptionPlan, UserProfile, InvoiceTemplate } from '..
 import { InvoiceRenderer } from './InvoiceRenderer.tsx';
 import { RazorpayCheckoutButton } from './RazorpayCheckoutButton.tsx';
 import { LegalComplianceModal } from './LegalComplianceModal.tsx';
+import { toast } from '../context/ToastContext.tsx';
 
 interface SettingsViewProps {
   profile: UserProfile | null;
@@ -82,13 +83,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ profile, onUpdatePro
     const file = e.target.files?.[0];
     if (file) {
       if (file.size > 2 * 1024 * 1024) {
-        alert('Please choose an image file smaller than 2MB.');
+        toast.warning('Please choose an image file smaller than 2MB.', 'File Too Large');
         return;
       }
       const reader = new FileReader();
       reader.onload = () => {
         if (typeof reader.result === 'string') {
           setLogoUrl(reader.result);
+          toast.success('Logo uploaded and ready to save.', 'Logo Uploaded');
         }
       };
       reader.readAsDataURL(file);
@@ -118,9 +120,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ profile, onUpdatePro
         whatsappApiToken,
       });
       setSavedSuccess(true);
+      toast.success('Business profile, bank details & invoice styles updated.', 'Settings Saved');
       setTimeout(() => setSavedSuccess(false), 3000);
     } catch (err: any) {
-      alert(err.message || 'Error updating settings');
+      toast.error(err.message || 'Error updating settings', 'Save Error');
     } finally {
       setIsSaving(false);
     }

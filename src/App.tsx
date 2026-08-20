@@ -22,6 +22,8 @@ import { ShortcutsModal } from './components/ShortcutsModal.tsx';
 import { SkeletonCard, SkeletonTable } from './components/SkeletonLoader.tsx';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts.ts';
 
+import { ToastProvider, toast } from './context/ToastContext.tsx';
+
 import {
   fetchProfile,
   updateProfile,
@@ -279,44 +281,60 @@ function AppContent() {
 
   // Handler: Save Client (Create or Update)
   const handleSaveClient = async (clientData: any) => {
-    if (clientData.id) {
-      await updateClient(clientData.id, clientData);
-    } else {
-      await createClient(clientData);
+    try {
+      if (clientData.id) {
+        await updateClient(clientData.id, clientData);
+        toast.success(`Updated party "${clientData.name}" successfully.`);
+      } else {
+        await createClient(clientData);
+        toast.success(`Added new party "${clientData.name}" to ledger.`);
+      }
+      await loadAllData();
+      setIsClientModalOpen(false);
+      setClientToEdit(null);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to save party');
     }
-    await loadAllData();
-    setIsClientModalOpen(false);
-    setClientToEdit(null);
   };
 
   // Handler: Toggle Client Active/Disabled Status
   const handleToggleClientStatus = async (clientId: number, currentStatus: boolean) => {
     const actionText = currentStatus ? 'disable' : 'enable';
-    if (!confirm(`Are you sure you want to ${actionText} this client?`)) return;
     try {
       await toggleClientStatus(clientId, !currentStatus);
       await loadAllData();
+      toast.success(
+        currentStatus 
+          ? 'Client disabled. They will be excluded from new invoices and risk scoring.' 
+          : 'Client re-enabled and active for invoicing.',
+        currentStatus ? 'Client Disabled' : 'Client Enabled'
+      );
     } catch (err: any) {
-      alert(err.message || `Failed to ${actionText} client`);
+      toast.error(err.message || `Failed to ${actionText} client`);
     }
   };
 
   // Handler: Delete Client
   const handleDeleteClient = async (clientId: number) => {
-    if (!confirm('Are you sure you want to permanently delete this client and their associated records? (Tip: You can use "Disable" instead to preserve history)')) return;
     try {
       await deleteClient(clientId);
       await loadAllData();
+      toast.success('Client and associated records removed successfully.');
     } catch (err: any) {
-      alert(err.message || 'Failed to delete client');
+      toast.error(err.message || 'Failed to delete client');
     }
   };
 
   // Handler: Update Business Profile
   const handleUpdateProfile = async (profileData: any) => {
-    const updated = await updateProfile(profileData);
-    setProfile(updated);
-    await loadAllData();
+    try {
+      const updated = await updateProfile(profileData);
+      setProfile(updated);
+      await loadAllData();
+      toast.success('Business settings & compliance profile updated successfully.');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to update business settings');
+    }
   };
 
   // Handler: Select Plan / Start Trial
@@ -597,7 +615,9 @@ export default function App() {
   return (
     <AuthProvider>
       <ThemeProvider>
-        <AppContent />
+        <ToastProvider>
+          <AppContent />
+        </ToastProvider>
       </ThemeProvider>
     </AuthProvider>
   );

@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { AnalyticsData, Invoice, UserProfile } from '../lib/types.ts';
 import { getPlanLimits } from '../lib/planConfig.ts';
+import { toast } from '../context/ToastContext.tsx';
 
 interface MonthlyReportsViewProps {
   analytics: AnalyticsData | null;
@@ -71,7 +72,13 @@ export const MonthlyReportsView: React.FC<MonthlyReportsViewProps> = ({ analytic
 
   const handleExportGstr1Json = () => {
     if (!isPro) {
-      alert('GSTR-1 JSON Portal-Ready export is a Pro Plan feature. Upgrade to Pro (₹499/mo) to download automated government portal filings.');
+      toast.warning(
+        'GSTR-1 JSON Portal-Ready export is a Pro Plan feature. Upgrade to Pro (₹499/mo) to download automated government portal filings.',
+        {
+          title: 'Pro Feature Required',
+          action: onUpgrade ? { label: 'Upgrade to Pro', onClick: onUpgrade } : undefined,
+        }
+      );
       if (onUpgrade) onUpgrade();
       return;
     }

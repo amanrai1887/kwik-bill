@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { Client, IndustryType, InvoiceItem, UserProfile } from '../lib/types.ts';
 import { INDIAN_STATES, calculateGstBreakdown, getStateCodeFromGstin } from '../lib/gstCompliance.ts';
+import { toast } from '../context/ToastContext.tsx';
 
 interface InvoiceCreatorModalProps {
   isOpen: boolean;
@@ -170,14 +171,14 @@ export const InvoiceCreatorModal: React.FC<InvoiceCreatorModalProps> = ({
     e.preventDefault();
     const effectiveClientId = clientId || clients[0]?.id;
     if (!effectiveClientId) {
-      alert('Please add a client first by clicking "+ Add" next to Client / Party');
+      toast.warning('Please add a party first by clicking "+ Add" next to Party / Client', 'Party Required');
       onQuickAddClient();
       return;
     }
 
     // Rule 46(b) validation for GST Invoice Number format (max 16 characters)
     if (invoiceNumber.trim().length > 16) {
-      alert('GST Compliance Warning: As per Rule 46(b) of CGST Rules, Invoice Number must be 16 characters or less.');
+      toast.warning('As per Rule 46(b) of CGST Rules, Invoice Number must be 16 characters or less.', 'GST Compliance Warning');
       return;
     }
 
@@ -229,9 +230,10 @@ export const InvoiceCreatorModal: React.FC<InvoiceCreatorModalProps> = ({
         recurringFrequency,
         autoSendWhatsApp,
       });
+      toast.success(`Created GST Invoice #${invoiceNumber} for ₹${totalAmount.toLocaleString('en-IN')}`, 'Invoice Generated');
       onClose();
     } catch (err: any) {
-      alert(err.message || 'Error creating invoice');
+      toast.error(err.message || 'Error creating invoice', 'Invoice Error');
     } finally {
       setIsSubmitting(false);
     }

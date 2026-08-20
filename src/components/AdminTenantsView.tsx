@@ -26,6 +26,7 @@ import {
   fetchAdminPlanRequests,
   updateAdminPlanRequestStatus
 } from '../lib/api.ts';
+import { toast } from '../context/ToastContext.tsx';
 
 export const AdminTenantsView: React.FC = () => {
   const [activeAdminTab, setActiveAdminTab] = useState<'tenants' | 'requests'>('tenants');
@@ -84,9 +85,10 @@ export const AdminTenantsView: React.FC = () => {
       setNewEmail('');
       setNewPhone('');
       setNewUpiId('');
+      toast.success(`Business "${newBizName}" onboarded and active!`, 'Tenant Created');
       await loadData();
     } catch (err: any) {
-      alert(err.message || 'Failed to onboard business');
+      toast.error(err.message || 'Failed to onboard business', 'Onboarding Failed');
     } finally {
       setIsSubmitting(false);
     }
@@ -96,9 +98,10 @@ export const AdminTenantsView: React.FC = () => {
     setUpdatingId(tenantId);
     try {
       await updateAdminTenantSubscription(tenantId, newPlan, newStatus);
+      toast.success('Tenant subscription plan and status updated.', 'Subscription Updated');
       await loadData();
     } catch (err: any) {
-      alert(err.message || 'Failed to update subscription');
+      toast.error(err.message || 'Failed to update subscription', 'Update Error');
     } finally {
       setUpdatingId(null);
     }

@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { Invoice, UserProfile } from '../lib/types.ts';
 import { getPlanLimits } from '../lib/planConfig.ts';
+import { toast } from '../context/ToastContext.tsx';
 
 interface WhatsAppModalProps {
   isOpen: boolean;
@@ -119,7 +120,7 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
         onClose();
       }
     } catch (err: any) {
-      alert(err.message || 'Failed to dispatch reminder');
+      toast.error(err.message || 'Failed to dispatch reminder', 'Dispatch Failed');
     } finally {
       setIsLogging(false);
     }
@@ -173,7 +174,10 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
                 type="button"
                 onClick={() => {
                   if (!isPro && !profile?.whatsappPhoneNumberId) {
-                    alert('1-Click Direct Meta API background sending is a Pro Plan feature. Upgrade to Pro (₹499/mo) or configure Meta API credentials in Settings.');
+                    toast.warning(
+                      '1-Click Direct Meta API background sending is a Pro Plan feature. Upgrade to Pro (₹499/mo) or configure Meta API credentials in Settings.',
+                      'Pro Feature'
+                    );
                     return;
                   }
                   setSendMethod('direct');
@@ -264,7 +268,10 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
                 type="button"
                 onClick={() => {
                   if (!isPro) {
-                    alert('Urgent legal escalation template is a Pro Plan feature. Upgrade to Pro (₹499/mo) to unlock.');
+                    toast.warning(
+                      'Urgent legal escalation template is a Pro Plan feature. Upgrade to Pro (₹499/mo) to unlock.',
+                      'Pro Plan Required'
+                    );
                     return;
                   }
                   setTemplateType('urgent');
@@ -286,7 +293,10 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
                 type="button"
                 onClick={() => {
                   if (!isPro) {
-                    alert('Final Legal Overdue notice template is a Pro Plan feature. Upgrade to Pro (₹499/mo) to unlock.');
+                    toast.warning(
+                      'Final Legal Overdue notice template is a Pro Plan feature. Upgrade to Pro (₹499/mo) to unlock.',
+                      'Pro Plan Required'
+                    );
                     return;
                   }
                   setTemplateType('overdue');

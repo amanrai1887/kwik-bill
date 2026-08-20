@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, UserPlus, Building, Phone, Mail, MapPin } from 'lucide-react';
 import { Client, IndustryType } from '../lib/types.ts';
+import { toast } from '../context/ToastContext.tsx';
 
 interface ClientModalProps {
   isOpen: boolean;
@@ -54,8 +55,8 @@ export const ClientModal: React.FC<ClientModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !phone) {
-      alert('Please provide client name and phone number');
+    if (!name || !phone || phone.trim() === '+91') {
+      toast.warning('Please provide party name and a valid phone number', 'Missing Information');
       return;
     }
 
@@ -75,7 +76,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({
       });
       onClose();
     } catch (err: any) {
-      alert(err.message || 'Error saving client');
+      toast.error(err.message || 'Error saving party', 'Save Failed');
     } finally {
       setIsSubmitting(false);
     }

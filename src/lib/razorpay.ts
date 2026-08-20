@@ -1,4 +1,5 @@
 import { createRazorpayOrderApi, verifyRazorpayPaymentApi } from './api.ts';
+import { toast } from '../context/ToastContext.tsx';
 
 declare global {
   interface Window {
@@ -26,55 +27,58 @@ export function loadRazorpayScript(): Promise<boolean> {
   });
 }
 
-export interface CheckoutOptions {
+export interface LaunchCheckoutOptions {
   amountInPaise: number;
   planId: string;
   planName: string;
   userEmail?: string;
   userName?: string;
   userPhone?: string;
-  onSuccess?: (verifyResponse: any) => void;
-  onError?: (errorMessage: string) => void;
+  onSuccess?: (verifyRes: any) => void;
+  onError?: (errMsg: string) => void;
   onDismiss?: () => void;
 }
 
 /**
- * Launches the standard Razorpay checkout modal
+ * Launches the native Razorpay checkout overlay
  */
 export async function launchRazorpayCheckout({
   amountInPaise,
   planId,
   planName,
-  userEmail,
-  userName,
-  userPhone,
+  userEmail = '',
+  userName = '',
+  userPhone = '',
   onSuccess,
   onError,
   onDismiss,
-}: CheckoutOptions) {
+}: LaunchCheckoutOptions): Promise<void> {
   try {
-    // 1. Ensure SDK script is loaded
     const isLoaded = await loadRazorpayScript();
     if (!isLoaded) {
       throw new Error('Razorpay SDK failed to load. Please check your internet connection.');
     }
 
-    // 2. Call backend to create Razorpay Order
+    // 1. Create order on backend (Serverless API)
     const orderData = await createRazorpayOrderApi(amountInPaise, planId, {
       planName,
-      customerEmail: userEmail || '',
+      customerEmail: userEmail,
     });
 
     const viteEnvKey = typeof import.meta !== 'undefined' && (import.meta as any).env ? (import.meta as any).env.VITE_RAZORPAY_KEY_ID : undefined;
     const keyId = orderData.key_id || viteEnvKey || 'rzp_test_TReZcmt9KLYGJB';
 
-    // 3. Configure Razorpay Standard Modal options
+    if (!orderData || !orderData.order_id) {
+      throw new Error('Could not initialize payment order with gateway');
+    }
+
+    // 2. Configure Razorpay Standard Checkout options
     const options = {
       key: keyId,
       amount: orderData.amount,
       currency: orderData.currency || 'INR',
       name: 'KwikBill Pro',
-      description: `Subscription: ${planName}`,
+      description: `Subscription for ${planName}`,
       image: '/logo.png',
       order_id: orderData.order_id,
       prefill: {
@@ -83,11 +87,10 @@ export async function launchRazorpayCheckout({
         contact: userPhone || '',
       },
       theme: {
-        color: '#4f46e5', // Brand Indigo
+        color: '#4f46e5', // KwikBill Indigo Brand Color
       },
       modal: {
-        ondismiss: function () {
-          console.log('[Razorpay Checkout] Dismissed by user');
+        ondismiss: () => {
           if (onDismiss) onDismiss();
         },
       },
@@ -112,7 +115,7 @@ export async function launchRazorpayCheckout({
           console.error('[Payment Verification Failed]:', verifyErr);
           const errorMsg = verifyErr.message || 'Payment signature verification failed';
           if (onError) onError(errorMsg);
-          else alert(`Payment Error: ${errorMsg}`);
+          else toast.error(`Payment Error: ${errorMsg}`, 'Verification Failed');
         }
       },
     };
@@ -123,7 +126,7 @@ export async function launchRazorpayCheckout({
       console.error('[Razorpay payment.failed]:', response.error);
       const errMsg = response.error?.description || 'Payment transaction failed';
       if (onError) onError(errMsg);
-      else alert(`Payment Failed: ${errMsg}`);
+      else toast.error(`Payment Failed: ${errMsg}`, 'Transaction Error');
     });
 
     // Open Modal
@@ -132,6 +135,6 @@ export async function launchRazorpayCheckout({
     console.error('[Razorpay Launch Error]:', error);
     const msg = error.message || 'Failed to initiate payment checkout';
     if (onError) onError(msg);
-    else alert(`Error: ${msg}`);
+    else toast.error(`Error: ${msg}`, 'Payment Gateway Error');
   }
 }

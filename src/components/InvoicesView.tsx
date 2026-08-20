@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { Invoice, InvoiceStatus } from '../lib/types.ts';
 import { triggerPaymentCelebration } from '../utils/confetti.ts';
+import { toast } from '../context/ToastContext.tsx';
 
 interface InvoicesViewProps {
   invoices: Invoice[];
@@ -143,9 +144,11 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
 
   // Bulk WhatsApp Trigger
   const handleBulkReminders = () => {
-    const selectedInvoices = invoices.filter(inv => selectedIds.includes(inv.id) && inv.status !== 'paid');
+    const selectedInvoices = invoices.filter(
+      (inv) => selectedIds.includes(inv.id) && inv.status !== 'paid' && inv.status !== 'cancelled' && !inv.isCancelled
+    );
     if (selectedInvoices.length === 0) {
-      alert('None of the selected invoices have pending dues.');
+      toast.info('None of the selected invoices have pending dues.', 'No Pending Invoices');
       return;
     }
 
