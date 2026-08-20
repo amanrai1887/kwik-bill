@@ -17,9 +17,11 @@ import {
   FileText,
   Truck,
   Layers,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Lock
 } from 'lucide-react';
 import { IndustryType, SubscriptionPlan, UserProfile, InvoiceTemplate } from '../lib/types.ts';
+import { getPlanLimits } from '../lib/planConfig.ts';
 import { InvoiceRenderer } from './InvoiceRenderer.tsx';
 import { RazorpayCheckoutButton } from './RazorpayCheckoutButton.tsx';
 import { LegalComplianceModal } from './LegalComplianceModal.tsx';
@@ -57,6 +59,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ profile, onUpdatePro
 
   const [isSaving, setIsSaving] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
+
+  const planLimits = getPlanLimits(profile);
+  const isPro = planLimits.canUseAllTemplates;
 
   useEffect(() => {
     if (profile) {
@@ -359,21 +364,41 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ profile, onUpdatePro
 
           {/* 6 Template Selector Grid */}
           <div className="space-y-3 pt-2">
-            <label className="font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider text-[11px] block">
-              Choose Active Invoice Template
-            </label>
+            <div className="flex items-center justify-between">
+              <label className="font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider text-[11px] block">
+                Choose Active Invoice Template ({isPro ? 'All 6 Unlocked' : '2 of 6 Unlocked on Current Plan'})
+              </label>
+              {!isPro && (
+                <span className="text-[11px] font-bold text-purple-600 dark:text-purple-400">
+                  ✨ Upgrade to Pro (₹499/mo) for all 6 templates
+                </span>
+              )}
+            </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {templatesList.map((tpl) => {
                 const Icon = tpl.icon;
                 const isSelected = invoiceTemplate === tpl.id;
+                const isUnlocked = isPro || tpl.id === 'modern' || tpl.id === 'classic';
+
                 return (
                   <div
                     key={tpl.id}
-                    onClick={() => setInvoiceTemplate(tpl.id)}
-                    className={`p-4 rounded-2xl border cursor-pointer transition-all flex flex-col justify-between ${
+                    onClick={() => {
+                      if (!isUnlocked) {
+                        toast.warning(
+                          `The "${tpl.name}" template is exclusively available on the Pro Growth Plan (₹499/mo). Upgrade to Pro to unlock all 6 designer invoice templates.`,
+                          'Pro Template Locked'
+                        );
+                        return;
+                      }
+                      setInvoiceTemplate(tpl.id);
+                    }}
+                    className={`p-4 rounded-2xl border cursor-pointer transition-all flex flex-col justify-between relative ${
                       isSelected
                         ? 'bg-indigo-50/50 border-indigo-600 ring-2 ring-indigo-600/20 shadow-sm'
+                        : !isUnlocked
+                        ? 'bg-slate-50/60 dark:bg-slate-900/40 border-slate-200 dark:border-slate-800 opacity-80 hover:opacity-100'
                         : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'
                     }`}
                   >
@@ -381,36 +406,67 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ profile, onUpdatePro
                       <div className="flex items-center justify-between mb-3">
                         <div
                           className={`w-9 h-9 rounded-xl flex items-center justify-center ${
-                            isSelected ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                            isSelected
+                              ? 'bg-indigo-600 text-white'
+                              : !isUnlocked
+                              ? 'bg-slate-200 dark:bg-slate-800 text-slate-400'
+                              : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
                           }`}
                         >
                           <Icon className="w-4 h-4" />
                         </div>
-                        <span
-                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                            isSelected ? 'bg-indigo-200 text-indigo-900 font-extrabold' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
-                          }`}
-                        >
-                          {tpl.tag}
-                        </span>
+                        {!isUnlocked ? (
+                          <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 uppercase flex items-center gap-1">
+                            <Lock className="w-2.5 h-2.5" /> PRO ONLY
+                          </span>
+                        ) : (
+                          <span
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                              isSelected
+                                ? 'bg-indigo-200 text-indigo-900 font-extrabold'
+                                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                            }`}
+                          >
+                            {tpl.tag}
+                          </span>
+                        )}
                       </div>
 
-                      <h3 className="font-bold text-slate-900 dark:text-white text-sm mb-1">{tpl.name}</h3>
+                      <h3 className="font-bold text-slate-900 dark:text-white text-sm mb-1 flex items-center gap-1.5">
+                        <span>{tpl.name}</span>
+                        {!isUnlocked && <Lock className="w-3.5 h-3.5 text-amber-500 shrink-0" />}
+                      </h3>
                       <p className="text-slate-500 text-[11px] leading-relaxed mb-3">{tpl.desc}</p>
                     </div>
 
                     <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800">
-                      <span className="text-[10px] font-bold text-indigo-600">
-                        {isSelected ? '✓ Active Template' : 'Select Template'}
-                      </span>
+                      {isSelected ? (
+                        <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400">
+                          ✓ Active Template
+                        </span>
+                      ) : !isUnlocked ? (
+                        <span className="text-[10px] font-bold text-purple-600 dark:text-purple-400 flex items-center gap-1">
+                          <Lock className="w-3 h-3" /> Upgrade to Unlock
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-bold text-slate-600 dark:text-slate-400">
+                          Select Template
+                        </span>
+                      )}
                       <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
+                          if (!isUnlocked) {
+                            toast.warning(
+                              `Previewing "${tpl.name}" (Pro Plan feature). Upgrade to Pro to activate this template for your live invoices.`,
+                              'Pro Preview'
+                            );
+                          }
                           setInvoiceTemplate(tpl.id);
                           setIsPreviewOpen(true);
                         }}
-                        className="text-[11px] text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 font-medium flex items-center gap-1"
+                        className="text-[11px] text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 font-medium flex items-center gap-1 cursor-pointer"
                       >
                         <Eye className="w-3 h-3" /> Preview
                       </button>

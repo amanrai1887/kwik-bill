@@ -41,6 +41,7 @@ import {
   fetchAnalytics,
 } from './lib/api.ts';
 import { AnalyticsData, Client, Invoice, ReminderLog, UserProfile } from './lib/types.ts';
+import { getPlanLimits } from './lib/planConfig.ts';
 
 import { LoginModal } from './components/LoginModal.tsx';
 import { PublicInvoicePayView } from './components/PublicInvoicePayView.tsx';
@@ -53,7 +54,7 @@ function AppContent() {
   if (isPayRoute) {
     return <PublicInvoicePayView />;
   }
-  
+
   // App view state: initialize from localStorage or check user session
   const [currentView, setCurrentView] = useState<'landing' | 'app'>(() => {
     const saved = localStorage.getItem('kwikbill_current_view');
@@ -179,8 +180,8 @@ function AppContent() {
     const freshProfile = await loadAllData();
     if (!freshProfile) return;
 
-    const isSuperAdmin = 
-      freshProfile.role === 'superadmin' || 
+    const isSuperAdmin =
+      freshProfile.role === 'superadmin' ||
       freshProfile.email?.toLowerCase() === 'arai.343531@gmail.com';
 
     if (isSuperAdmin) {
@@ -189,7 +190,7 @@ function AppContent() {
       return;
     }
 
-    const hasActiveSubscription = 
+    const hasActiveSubscription =
       (freshProfile.subscriptionStatus === 'active' || freshProfile.subscriptionStatus === 'trial') &&
       freshProfile.subscriptionPlan;
 
@@ -204,8 +205,8 @@ function AppContent() {
 
   // If superadmin logs in, lock view to Master Admin Console
   useEffect(() => {
-    const isSuperAdmin = 
-      profile?.role === 'superadmin' || 
+    const isSuperAdmin =
+      profile?.role === 'superadmin' ||
       user?.email?.toLowerCase() === 'arai.343531@gmail.com' ||
       profile?.email?.toLowerCase() === 'arai.343531@gmail.com';
 
@@ -219,39 +220,52 @@ function AppContent() {
 
   // Handler: Create Invoice & optional Recurring schedule
   const handleCreateInvoice = async (invoiceData: any) => {
-    await createInvoice(invoiceData);
-    
-    // If user checked "Also Save as Automated Recurring Schedule"
-    if (invoiceData.isRecurring) {
-      try {
-        const { createRecurringProfile } = await import('./lib/api.ts');
-        await createRecurringProfile({
-          clientId: invoiceData.clientId,
-          title: `Recurring: ${invoiceData.items[0]?.description || 'Retainer Contract'}`,
-          frequency: invoiceData.recurringFrequency || 'monthly',
-          startDate: invoiceData.issueDate,
-          autoSendWhatsApp: invoiceData.autoSendWhatsApp ?? true,
-          currency: 'INR',
-          subtotal: invoiceData.subtotal,
-          taxRate: invoiceData.taxRate,
-          taxAmount: invoiceData.taxAmount,
-          tdsRate: invoiceData.tdsRate,
-          tdsAmount: invoiceData.tdsAmount,
-          discountAmount: invoiceData.discountAmount,
-          totalAmount: invoiceData.totalAmount,
-          items: invoiceData.items,
-          industryDetails: invoiceData.industryDetails,
-          notes: invoiceData.notes,
-          terms: invoiceData.terms,
-        });
-      } catch (err) {
-        console.error('Failed to create recurring profile:', err);
-      }
-    }
+    try {
+      await createInvoice(invoiceData);
 
-    await loadAllData();
-    setIsCreateInvoiceOpen(false);
-    setActiveTab(invoiceData.isRecurring ? 'recurring' : 'invoices');
+      const planLimits = getPlanLimits(profile);
+      const isPro = planLimits.canUseRecurringBilling;
+
+      // If user checked "Also Save as Automated Recurring Schedule"
+      if (invoiceData.isRecurring && isPro) {
+        try {
+          const { createRecurringProfile } = await import('./lib/api.ts');
+          await createRecurringProfile({
+            clientId: invoiceData.clientId,
+            title: `Recurring: ${invoiceData.items[0]?.description || 'Retainer Contract'}`,
+            frequency: invoiceData.recurringFrequency || 'monthly',
+            startDate: invoiceData.issueDate || new Date().toISOString().split('T')[0],
+            autoSendWhatsApp: invoiceData.autoSendWhatsApp ?? true,
+            currency: 'INR',
+            subtotal: invoiceData.subtotal,
+            taxRate: invoiceData.taxRate,
+            taxAmount: invoiceData.taxAmount,
+            tdsRate: invoiceData.tdsRate,
+            tdsAmount: invoiceData.tdsAmount,
+            discountAmount: invoiceData.discountAmount,
+            totalAmount: invoiceData.totalAmount,
+            items: invoiceData.items,
+            industryDetails: invoiceData.industryDetails,
+            notes: invoiceData.notes,
+            terms: invoiceData.terms,
+          });
+          toast.success('Invoice & automated recurring schedule created successfully!', 'Schedule Saved');
+        } catch (err: any) {
+          console.error('Failed to create recurring profile:', err);
+          toast.error(err.message || 'Invoice created, but recurring setup failed', 'Recurring Error');
+        }
+      } else {
+        toast.success(`Created invoice #${invoiceData.invoiceNumber} successfully!`, 'Invoice Saved');
+      }
+
+      await loadAllData();
+      setIsCreateInvoiceOpen(false);
+      if (invoiceData.isRecurring && isPro) {
+        setActiveTab('recurring');
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to create invoice', 'Creation Error');
+    }
   };
 
 
@@ -304,8 +318,8 @@ function AppContent() {
       await toggleClientStatus(clientId, !currentStatus);
       await loadAllData();
       toast.success(
-        currentStatus 
-          ? 'Client disabled. They will be excluded from new invoices and risk scoring.' 
+        currentStatus
+          ? 'Client disabled. They will be excluded from new invoices and risk scoring.'
           : 'Client re-enabled and active for invoicing.',
         currentStatus ? 'Client Disabled' : 'Client Enabled'
       );

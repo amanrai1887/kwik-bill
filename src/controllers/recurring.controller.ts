@@ -44,6 +44,18 @@ export async function createRecurringProfile(req: AuthRequest, res: Response) {
   const userId = req.dbUser?.id;
   if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
+  // STRICT PRO PLAN CHECK: Only Pro users (or superadmin) can create recurring billing profiles
+  const userRole = req.dbUser?.role;
+  const userEmail = req.dbUser?.email?.toLowerCase();
+  const userPlan = req.dbUser?.subscriptionPlan;
+  const isProUser = userRole === 'superadmin' || userEmail === 'arai.343531@gmail.com' || userPlan === 'pro_499';
+
+  if (!isProUser) {
+    return res.status(403).json({
+      error: 'Automated recurring billing is exclusively available on the Pro Growth Plan (₹499/mo). Please upgrade to Pro to create recurring schedules.',
+    });
+  }
+
   try {
     const {
       clientId,

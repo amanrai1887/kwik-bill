@@ -649,7 +649,18 @@ async function getUserProfile(req, res) {
 async function putUserProfile(req, res) {
   try {
     const userId = req.dbUser.id;
-    const updated = await updateUserProfile(userId, req.body);
+    const userRole = req.dbUser?.role;
+    const userEmail = req.dbUser?.email?.toLowerCase();
+    const userPlan = req.dbUser?.subscriptionPlan;
+    const isPro = userRole === "superadmin" || userEmail === "arai.343531@gmail.com" || userPlan === "pro_499";
+    const payload = { ...req.body };
+    if (!isPro && payload.invoiceTemplate) {
+      const allowedTemplates = ["modern", "classic"];
+      if (!allowedTemplates.includes(payload.invoiceTemplate)) {
+        payload.invoiceTemplate = "modern";
+      }
+    }
+    const updated = await updateUserProfile(userId, payload);
     res.json({ success: true, user: updated });
   } catch (error) {
     console.error("Failed to update profile:", error);
@@ -1293,9 +1304,14 @@ async function sendReminder(req, res) {
     let deliveryStatus = "sent";
     let directApiSent = false;
     let apiResponse = null;
-    const whatsappToken = dbUser.whatsappApiToken || process.env.META_WHATSAPP_TOKEN;
-    const phoneNumberId = dbUser.whatsappPhoneNumberId || process.env.META_PHONE_NUMBER_ID;
-    if (sendMethod === "direct" && whatsappToken && phoneNumberId) {
+    const whatsappToken = dbUser.whatsappApiToken?.trim() || process.env.META_WHATSAPP_TOKEN?.trim();
+    const phoneNumberId = dbUser.whatsappPhoneNumberId?.trim() || process.env.META_PHONE_NUMBER_ID?.trim();
+    if (sendMethod === "direct") {
+      if (!whatsappToken || !phoneNumberId) {
+        return res.status(400).json({
+          error: "Meta WhatsApp Cloud API credentials (Phone Number ID and Token) are not configured in Business Settings. Please configure them in Settings or send via wa.me."
+        });
+      }
       try {
         const metaUrl = `https://graph.facebook.com/v19.0/${phoneNumberId}/messages`;
         const isDocument = Boolean(pdfUrl || sendAsDocument);
@@ -1776,6 +1792,15 @@ async function getRecurringProfiles(req, res) {
 async function createRecurringProfile(req, res) {
   const userId = req.dbUser?.id;
   if (!userId) return res.status(401).json({ error: "Unauthorized" });
+  const userRole = req.dbUser?.role;
+  const userEmail = req.dbUser?.email?.toLowerCase();
+  const userPlan = req.dbUser?.subscriptionPlan;
+  const isProUser = userRole === "superadmin" || userEmail === "arai.343531@gmail.com" || userPlan === "pro_499";
+  if (!isProUser) {
+    return res.status(403).json({
+      error: "Automated recurring billing is exclusively available on the Pro Growth Plan (\u20B9499/mo). Please upgrade to Pro to create recurring schedules."
+    });
+  }
   try {
     const {
       clientId,

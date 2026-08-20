@@ -36,11 +36,19 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
 }) => {
   const planLimits = getPlanLimits(profile);
   const isPro = planLimits.canUseEscalationTemplates;
+  const hasMetaCredentials = Boolean(
+    profile?.whatsappPhoneNumberId &&
+    profile.whatsappPhoneNumberId.trim() !== '' &&
+    profile?.whatsappApiToken &&
+    profile.whatsappApiToken.trim() !== ''
+  );
+  const canUseDirectSend = Boolean(isPro && hasMetaCredentials);
+
   const [templateType, setTemplateType] = useState<'friendly' | 'due_today' | 'urgent' | 'final_legal'>(
     riskInfo?.riskLevel === 'high' ? 'urgent' : 'friendly'
   );
   const [sendMode, setSendMode] = useState<'wa_me' | 'direct'>(
-    profile?.whatsappPhoneNumberId && profile?.whatsappApiToken && isPro ? 'direct' : 'wa_me'
+    canUseDirectSend ? 'direct' : 'wa_me'
   );
   const [isSending, setIsSending] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -95,7 +103,7 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
 
     setIsSending(true);
     try {
-      if (sendMode === 'direct') {
+      if (sendMode === 'direct' && canUseDirectSend) {
         const res: any = await api.sendWhatsAppReminder({
           invoiceId: invoice.id,
           clientId: invoice.clientId,
@@ -256,17 +264,30 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
 
               <TouchableOpacity
                 onPress={() => {
-                  if (!isPro && !profile?.whatsappPhoneNumberId) {
+                  if (!isPro) {
                     Alert.alert('Pro Feature', '1-Click Direct Background API sending is available on the Pro Growth Plan (₹499/mo). Please upgrade or use Native WhatsApp app.');
+                    setSendMode('wa_me');
+                    return;
+                  }
+                  if (!hasMetaCredentials) {
+                    Alert.alert(
+                      'Meta Credentials Required',
+                      'Meta WhatsApp Cloud API credentials (Phone Number ID and Token) are not configured in Settings. Please add them in Settings or use Native WhatsApp app.'
+                    );
+                    setSendMode('wa_me');
                     return;
                   }
                   setSendMode('direct');
                 }}
-                style={[styles.channelBtn, sendMode === 'direct' && styles.channelBtnActive]}
+                style={[
+                  styles.channelBtn,
+                  sendMode === 'direct' && styles.channelBtnActive,
+                  !canUseDirectSend && { opacity: 0.7 }
+                ]}
               >
                 <Zap size={16} color={sendMode === 'direct' ? '#ffffff' : '#475569'} />
                 <Text style={[styles.channelText, sendMode === 'direct' && styles.channelTextActive]}>
-                  1-Click Direct API {!isPro && '(PRO)'}
+                  1-Click Direct API {!isPro ? '(PRO)' : !hasMetaCredentials ? '(CREDS)' : ''}
                 </Text>
               </TouchableOpacity>
             </View>

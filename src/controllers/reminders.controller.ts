@@ -29,11 +29,17 @@ export async function sendReminder(req: AuthRequest, res: Response) {
     let directApiSent = false;
     let apiResponse = null;
 
-    // Direct background sending via Meta WhatsApp Cloud API or Generic Gateway if credentials are configured
-    const whatsappToken = dbUser.whatsappApiToken || process.env.META_WHATSAPP_TOKEN;
-    const phoneNumberId = dbUser.whatsappPhoneNumberId || process.env.META_PHONE_NUMBER_ID;
+    // Direct background sending via Meta WhatsApp Cloud API if credentials are configured
+    const whatsappToken = dbUser.whatsappApiToken?.trim() || process.env.META_WHATSAPP_TOKEN?.trim();
+    const phoneNumberId = dbUser.whatsappPhoneNumberId?.trim() || process.env.META_PHONE_NUMBER_ID?.trim();
 
-    if (sendMethod === 'direct' && whatsappToken && phoneNumberId) {
+    if (sendMethod === 'direct') {
+      if (!whatsappToken || !phoneNumberId) {
+        return res.status(400).json({
+          error: 'Meta WhatsApp Cloud API credentials (Phone Number ID and Token) are not configured in Business Settings. Please configure them in Settings or send via wa.me.',
+        });
+      }
+
       try {
         const metaUrl = `https://graph.facebook.com/v19.0/${phoneNumberId}/messages`;
 

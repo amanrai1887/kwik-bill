@@ -71,6 +71,17 @@ export const RecurringScreen: React.FC<{ navigation: any }> = ({ navigation }) =
   };
 
   const handleRunNow = async () => {
+    if (!isPro) {
+      Alert.alert(
+        'Pro Plan Feature',
+        'Auto-Billing Scans are exclusively available on the Pro Growth Plan (₹499/mo). Upgrade to Pro in Settings to run auto-billing scans.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Upgrade to Pro', onPress: () => navigation.navigate('Settings') },
+        ]
+      );
+      return;
+    }
     setIsTriggering(true);
     try {
       const res = await api.triggerManualRecurringRun();
@@ -84,6 +95,21 @@ export const RecurringScreen: React.FC<{ navigation: any }> = ({ navigation }) =
     } finally {
       setIsTriggering(false);
     }
+  };
+
+  const handleCreateSchedule = () => {
+    if (!isPro) {
+      Alert.alert(
+        'Pro Plan Feature',
+        'Automated Recurring Billing is exclusively available on the Pro Growth Plan (₹499/mo). Upgrade to Pro in Settings to create recurring schedules.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Upgrade to Pro', onPress: () => navigation.navigate('Settings') },
+        ]
+      );
+      return;
+    }
+    navigation.navigate('InvoiceCreate');
   };
 
   const activeProfiles = profiles.filter((p) => p.isActive);
@@ -196,7 +222,7 @@ export const RecurringScreen: React.FC<{ navigation: any }> = ({ navigation }) =
 
           <TouchableOpacity
             style={styles.createBtn}
-            onPress={() => navigation.navigate('InvoiceCreate')}
+            onPress={handleCreateSchedule}
             activeOpacity={0.85}
           >
             <Plus size={14} color="#ffffff" strokeWidth={2.5} />

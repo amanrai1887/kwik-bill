@@ -8,6 +8,8 @@ export interface PlanLimits {
   canUseWhatsAppDirectApi: boolean;
   canExportGstr1Reports: boolean;
   canUseEscalationTemplates: boolean;
+  canUseAllTemplates: boolean;
+  allowedTemplatesCount: number;
 }
 
 export const PLAN_CONFIG: Record<SubscriptionPlan, PlanLimits> = {
@@ -19,6 +21,8 @@ export const PLAN_CONFIG: Record<SubscriptionPlan, PlanLimits> = {
     canUseWhatsAppDirectApi: false,
     canExportGstr1Reports: false,
     canUseEscalationTemplates: false,
+    canUseAllTemplates: false,
+    allowedTemplatesCount: 2,
   },
   starter_299: {
     name: 'Starter Plan (₹299/mo)',
@@ -28,6 +32,8 @@ export const PLAN_CONFIG: Record<SubscriptionPlan, PlanLimits> = {
     canUseWhatsAppDirectApi: false,
     canExportGstr1Reports: false,
     canUseEscalationTemplates: false,
+    canUseAllTemplates: false,
+    allowedTemplatesCount: 2,
   },
   pro_499: {
     name: 'Pro Growth Plan (₹499/mo)',
@@ -37,6 +43,8 @@ export const PLAN_CONFIG: Record<SubscriptionPlan, PlanLimits> = {
     canUseWhatsAppDirectApi: true,
     canExportGstr1Reports: true,
     canUseEscalationTemplates: true,
+    canUseAllTemplates: true,
+    allowedTemplatesCount: 6,
   },
 };
 

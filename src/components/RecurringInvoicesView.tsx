@@ -85,6 +85,14 @@ export const RecurringInvoicesView: React.FC<RecurringInvoicesViewProps> = ({
   };
 
   const handleManualRunNow = async () => {
+    if (!isPro) {
+      toast.warning(
+        'Automated Recurring Billing is a Pro Growth Plan (₹499/mo) feature. Upgrade to Pro to run auto-billing scans.',
+        'Pro Plan Required'
+      );
+      onUpgrade();
+      return;
+    }
     setIsTriggering(true);
     setTriggerMessage(null);
     try {
@@ -98,6 +106,18 @@ export const RecurringInvoicesView: React.FC<RecurringInvoicesViewProps> = ({
     } finally {
       setIsTriggering(false);
     }
+  };
+
+  const handleCreateClick = () => {
+    if (!isPro) {
+      toast.warning(
+        'Automated Recurring Billing is a Pro Growth Plan (₹499/mo) feature. Upgrade to Pro to unlock recurring schedules.',
+        'Pro Plan Required'
+      );
+      onUpgrade();
+      return;
+    }
+    onCreateRecurring();
   };
 
   // Metrics
@@ -143,7 +163,7 @@ export const RecurringInvoicesView: React.FC<RecurringInvoicesViewProps> = ({
           </button>
 
           <button
-            onClick={onCreateRecurring}
+            onClick={handleCreateClick}
             id="recurring-create-schedule-btn"
             className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-sm shadow-indigo-600/30 transition-all hover:scale-[1.02] cursor-pointer"
           >
@@ -276,8 +296,8 @@ export const RecurringInvoicesView: React.FC<RecurringInvoicesViewProps> = ({
                       Set up weekly, monthly, or retainer billing contracts for your repeat clients.
                     </p>
                     <button
-                      onClick={onCreateRecurring}
-                      className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 text-white font-bold text-xs hover:bg-indigo-700 transition"
+                      onClick={handleCreateClick}
+                      className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 text-white font-bold text-xs hover:bg-indigo-700 transition cursor-pointer"
                     >
                       <Plus className="w-3.5 h-3.5" />
                       Create First Recurring Schedule

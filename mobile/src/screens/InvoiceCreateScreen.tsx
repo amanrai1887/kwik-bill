@@ -26,9 +26,11 @@ import {
   Store,
   FileText,
   Percent,
+  Lock,
 } from 'lucide-react-native';
 import { api } from '../api/endpoints.ts';
 import { useMobileAuth } from '../context/AuthContext.tsx';
+import { getPlanLimits } from '../utils/planConfig.ts';
 import { Client, InvoiceItem } from '../types/index.ts';
 import { 
   INDIAN_STATES, 
@@ -40,6 +42,8 @@ type IndustryType = 'transport' | 'agency' | 'gym' | 'coaching' | 'retail' | 'fr
 
 export const InvoiceCreateScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const { user } = useMobileAuth();
+  const planLimits = getPlanLimits(user);
+  const isPro = planLimits.canUseRecurringBilling;
   const [clients, setClients] = useState<Client[]>([]);
   const [selectedClientId, setSelectedClientId] = useState<number | null>(null);
   const [invoiceNumber, setInvoiceNumber] = useState(
@@ -785,32 +789,53 @@ export const InvoiceCreateScreen: React.FC<{ navigation: any }> = ({ navigation 
         </View>
 
         {/* Recurring Auto-Billing Opt-in */}
-        <View style={[styles.card, { backgroundColor: '#eef2ff', borderColor: '#c7d2fe' }]}>
+        <View style={[styles.card, { backgroundColor: isPro ? '#eef2ff' : '#f8fafc', borderColor: isPro ? '#c7d2fe' : '#e2e8f0' }]}>
           <TouchableOpacity
-            style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}
-            onPress={() => setIsRecurring(!isRecurring)}
+            style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
+            onPress={() => {
+              if (!isPro) {
+                Alert.alert(
+                  'Pro Plan Feature',
+                  'Automated recurring billing schedules are exclusively available on the Pro Growth Plan (₹499/mo). Upgrade to Pro in Settings to unlock recurring billing.'
+                );
+                setIsRecurring(false);
+                return;
+              }
+              setIsRecurring(!isRecurring);
+            }}
             activeOpacity={0.8}
           >
-            <View
-              style={{
-                width: 20,
-                height: 20,
-                borderRadius: 6,
-                backgroundColor: isRecurring ? '#4f46e5' : '#ffffff',
-                borderWidth: 1.5,
-                borderColor: isRecurring ? '#4f46e5' : '#94a3b8',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              {isRecurring && <Check size={13} color="#ffffff" strokeWidth={3} />}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <View
+                style={{
+                  width: 20,
+                  height: 20,
+                  borderRadius: 6,
+                  backgroundColor: isRecurring ? '#4f46e5' : '#ffffff',
+                  borderWidth: 1.5,
+                  borderColor: isRecurring ? '#4f46e5' : '#94a3b8',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                {isRecurring && <Check size={13} color="#ffffff" strokeWidth={3} />}
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                {!isPro && <Lock size={12} color="#f59e0b" />}
+                <Text style={{ fontSize: 13, fontWeight: '900', color: isPro ? '#1e1b4b' : '#64748b' }}>
+                  🔁 Save as Automated Recurring Schedule
+                </Text>
+              </View>
             </View>
-            <Text style={{ fontSize: 13, fontWeight: '900', color: '#1e1b4b' }}>
-              🔁 Save as Automated Recurring Schedule
-            </Text>
+
+            {!isPro && (
+              <View style={{ backgroundColor: '#f3e8ff', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
+                <Text style={{ fontSize: 9, fontWeight: '900', color: '#7e22ce' }}>PRO ONLY</Text>
+              </View>
+            )}
           </TouchableOpacity>
 
-          {isRecurring && (
+          {isRecurring && isPro && (
             <View style={{ marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#c7d2fe' }}>
               <Text style={styles.label}>Billing Frequency</Text>
               <View style={{ flexDirection: 'row', gap: 6, marginBottom: 10 }}>

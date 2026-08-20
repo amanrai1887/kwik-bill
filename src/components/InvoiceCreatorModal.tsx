@@ -1,21 +1,24 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  X, 
-  Plus, 
-  Trash2, 
-  Truck, 
-  Megaphone, 
-  Laptop, 
-  Briefcase, 
-  IndianRupee, 
-  Calculator, 
+import {
+  X,
+  Plus,
+  Trash2,
+  Truck,
+  Megaphone,
+  Laptop,
+  Briefcase,
+  IndianRupee,
+  Calculator,
   FileText,
   UserPlus,
   Scale,
-  ShieldCheck
+  ShieldCheck,
+  Lock,
+  Sparkles
 } from 'lucide-react';
 import { Client, IndustryType, InvoiceItem, UserProfile } from '../lib/types.ts';
 import { INDIAN_STATES, calculateGstBreakdown, getStateCodeFromGstin } from '../lib/gstCompliance.ts';
+import { getPlanLimits } from '../lib/planConfig.ts';
 import { toast } from '../context/ToastContext.tsx';
 
 interface InvoiceCreatorModalProps {
@@ -36,6 +39,9 @@ export const InvoiceCreatorModal: React.FC<InvoiceCreatorModalProps> = ({
   onQuickAddClient,
 }) => {
   if (!isOpen) return null;
+
+  const planLimits = getPlanLimits(profile);
+  const isPro = planLimits.canUseRecurringBilling;
 
   const today = new Date().toISOString().split('T')[0];
   const dueDefault = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
@@ -413,11 +419,10 @@ export const InvoiceCreatorModal: React.FC<InvoiceCreatorModalProps> = ({
                     key={type}
                     type="button"
                     onClick={() => setIndustryType(type)}
-                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer ${
-                      industryType === type
+                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer ${industryType === type
                         ? 'bg-indigo-600 text-white shadow-xs'
                         : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
-                    }`}
+                      }`}
                   >
                     {type}
                   </button>
@@ -720,11 +725,10 @@ export const InvoiceCreatorModal: React.FC<InvoiceCreatorModalProps> = ({
                       key={rate}
                       type="button"
                       onClick={() => setTaxRate(rate)}
-                      className={`py-1.5 rounded-lg font-bold text-[11px] border transition-all ${
-                        taxRate === rate
+                      className={`py-1.5 rounded-lg font-bold text-[11px] border transition-all ${taxRate === rate
                           ? 'bg-indigo-600 text-white border-indigo-600'
                           : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                      }`}
+                        }`}
                     >
                       {rate}%
                     </button>
@@ -762,20 +766,47 @@ export const InvoiceCreatorModal: React.FC<InvoiceCreatorModalProps> = ({
               </div>
 
               {/* Recurring Auto-Billing Opt-in */}
-              <div className="p-3 bg-indigo-50/70 rounded-xl border border-indigo-100 space-y-2">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={isRecurring}
-                    onChange={(e) => setIsRecurring(e.target.checked)}
-                    className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500"
-                  />
-                  <span className="font-bold text-indigo-950 text-xs">
-                    🔁 Also Save as Automated Recurring Schedule
-                  </span>
+              <div className={`p-3 rounded-xl border space-y-2 transition-all ${
+                !isPro
+                  ? 'bg-slate-50 border-slate-200'
+                  : 'bg-indigo-50/70 border-indigo-100'
+              }`}>
+                <label className="flex items-center justify-between cursor-pointer">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={isRecurring}
+                      onChange={(e) => {
+                        if (!isPro) {
+                          toast.warning(
+                            'Automated Recurring Billing is a Pro Growth Plan (₹499/mo) feature. Upgrade to Pro to unlock automated recurring billing.',
+                            'Pro Plan Required'
+                          );
+                          setIsRecurring(false);
+                          return;
+                        }
+                        setIsRecurring(e.target.checked);
+                      }}
+                      className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                    />
+                    <div className="flex items-center gap-1.5">
+                      {!isPro ? (
+                        <Lock className="w-3.5 h-3.5 text-amber-500" />
+                      ) : null}
+                      <span className={`text-xs font-bold ${!isPro ? 'text-slate-600' : 'text-indigo-950'}`}>
+                        🔁 Also Save as Automated Recurring Schedule
+                      </span>
+                    </div>
+                  </div>
+
+                  {!isPro ? (
+                    <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-purple-100 text-purple-700 uppercase tracking-wider">
+                      PRO ONLY
+                    </span>
+                  ) : null}
                 </label>
 
-                {isRecurring && (
+                {isRecurring && isPro && (
                   <div className="grid grid-cols-2 gap-2 pt-1">
                     <div>
                       <label className="text-[10px] font-bold text-indigo-900 uppercase block mb-1">

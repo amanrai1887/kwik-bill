@@ -13,7 +13,9 @@ export interface PlanLimits {
   canExportGstr1Reports: boolean;
   canUseTransportModule: boolean; // LR, Vehicle No, POD
   canUseEscalationTemplates: boolean; // Urgent / Overdue legal escalation templates
-  canUseCustomTemplates: boolean; // 6 designer invoice templates & custom brand colors
+  canUseCustomTemplates: boolean; // Custom brand colors & logo
+  canUseAllTemplates: boolean; // All 6 designer templates on Pro (vs 2 for Free/Starter)
+  allowedTemplatesCount: number;
 }
 
 export const PLAN_CONFIG: Record<SubscriptionPlan, PlanLimits> = {
@@ -30,6 +32,8 @@ export const PLAN_CONFIG: Record<SubscriptionPlan, PlanLimits> = {
     canUseTransportModule: true,
     canUseEscalationTemplates: false,
     canUseCustomTemplates: false,
+    canUseAllTemplates: false,
+    allowedTemplatesCount: 2,
   },
   starter_299: {
     name: 'Starter Plan (₹299/mo)',
@@ -43,7 +47,9 @@ export const PLAN_CONFIG: Record<SubscriptionPlan, PlanLimits> = {
     canExportGstr1Reports: false,
     canUseTransportModule: true,
     canUseEscalationTemplates: false,
-    canUseCustomTemplates: true,
+    canUseCustomTemplates: false,
+    canUseAllTemplates: false,
+    allowedTemplatesCount: 2,
   },
   pro_499: {
     name: 'Pro Growth Plan (₹499/mo)',
@@ -58,6 +64,8 @@ export const PLAN_CONFIG: Record<SubscriptionPlan, PlanLimits> = {
     canUseTransportModule: true,
     canUseEscalationTemplates: true,
     canUseCustomTemplates: true,
+    canUseAllTemplates: true,
+    allowedTemplatesCount: 6,
   },
 };
 

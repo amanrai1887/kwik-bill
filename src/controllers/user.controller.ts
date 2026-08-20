@@ -18,7 +18,22 @@ export async function getUserProfile(req: AuthRequest, res: Response) {
 export async function putUserProfile(req: AuthRequest, res: Response) {
   try {
     const userId = req.dbUser.id;
-    const updated = await updateUserProfile(userId, req.body);
+    const userRole = req.dbUser?.role;
+    const userEmail = req.dbUser?.email?.toLowerCase();
+    const userPlan = req.dbUser?.subscriptionPlan;
+    const isPro = userRole === 'superadmin' || userEmail === 'arai.343531@gmail.com' || userPlan === 'pro_499';
+
+    const payload = { ...req.body };
+
+    // Enforce 2-template limit for free and starter users (only 'modern' and 'classic')
+    if (!isPro && payload.invoiceTemplate) {
+      const allowedTemplates = ['modern', 'classic'];
+      if (!allowedTemplates.includes(payload.invoiceTemplate)) {
+        payload.invoiceTemplate = 'modern';
+      }
+    }
+
+    const updated = await updateUserProfile(userId, payload);
     res.json({ success: true, user: updated });
   } catch (error: any) {
     console.error("Failed to update profile:", error);

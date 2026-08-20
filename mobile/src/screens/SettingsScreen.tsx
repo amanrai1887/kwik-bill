@@ -10,16 +10,19 @@ import {
   Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Building, QrCode, Key, LogOut, Check, Shield, Sparkles, User, CreditCard, Send, ArrowRight, Languages, Globe } from 'lucide-react-native';
+import { Building, QrCode, Key, LogOut, Check, Shield, Sparkles, User, CreditCard, Send, ArrowRight, Languages, Globe, Lock } from 'lucide-react-native';
 import { useMobileAuth } from '../context/AuthContext.tsx';
 import { useLanguage } from '../context/LanguageContext.tsx';
 import { api } from '../api/endpoints.ts';
+import { getPlanLimits } from '../utils/planConfig.ts';
 import { PlanSelectionModal } from '../components/PlanSelectionModal.tsx';
 import { LegalComplianceModal } from '../components/LegalComplianceModal.tsx';
 
 export const SettingsScreen: React.FC = () => {
   const { user, logout, refreshProfile } = useMobileAuth();
   const { language, setLanguage, t } = useLanguage();
+  const planLimits = getPlanLimits(user);
+  const isPro = planLimits.canUseAllTemplates;
 
   const [businessName, setBusinessName] = useState(user?.businessName || '');
   const [ownerName, setOwnerName] = useState(user?.ownerName || '');
@@ -192,25 +195,55 @@ export const SettingsScreen: React.FC = () => {
             </View>
             <Text style={styles.cardTitle}>{t('templates_branding', 'Invoice Templates & Branding')}</Text>
           </View>
-          <Text style={styles.cardSub}>{t('templates_sub', 'Choose your active invoice template style and brand accent color')}</Text>
-
-          <Text style={styles.label}>{t('active_invoice_template', 'Active Invoice Template')}</Text>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+            <Text style={styles.label}>{t('active_invoice_template', 'Active Invoice Template')}</Text>
+            {!isPro && (
+              <Text style={{ fontSize: 10, fontWeight: '800', color: '#c026d3' }}>
+                2 of 6 Unlocked
+              </Text>
+            )}
+          </View>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
             {templatesList.map((tpl) => {
               const isSelected = invoiceTemplate === tpl.id;
+              const isUnlocked = isPro || tpl.id === 'modern' || tpl.id === 'classic';
+
               return (
                 <TouchableOpacity
                   key={tpl.id}
-                  onPress={() => setInvoiceTemplate(tpl.id)}
+                  onPress={() => {
+                    if (!isUnlocked) {
+                      Alert.alert(
+                        'Pro Plan Template',
+                        `The "${tpl.label}" template is exclusively available on the Pro Growth Plan (₹499/mo). Upgrade to Pro to unlock all 6 designer templates.`,
+                        [
+                          { text: 'Cancel', style: 'cancel' },
+                          { text: 'Upgrade to Pro', onPress: () => setShowPlanModal(true) },
+                        ]
+                      );
+                      return;
+                    }
+                    setInvoiceTemplate(tpl.id);
+                  }}
                   style={[
                     styles.templateChip,
-                    isSelected && { backgroundColor: '#4f46e5', borderColor: '#4f46e5' }
+                    isSelected && { backgroundColor: '#4f46e5', borderColor: '#4f46e5' },
+                    !isUnlocked && { opacity: 0.7, backgroundColor: '#f8fafc', borderColor: '#e2e8f0' },
                   ]}
                   activeOpacity={0.8}
                 >
-                  <Text style={[styles.templateChipText, isSelected && { color: '#ffffff', fontWeight: '900' }]}>
-                    {tpl.label}
-                  </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                    {!isUnlocked && <Lock size={10} color="#a855f7" />}
+                    <Text
+                      style={[
+                        styles.templateChipText,
+                        isSelected && { color: '#ffffff', fontWeight: '900' },
+                        !isUnlocked && { color: '#64748b' },
+                      ]}
+                    >
+                      {tpl.label} {!isUnlocked ? '(PRO)' : ''}
+                    </Text>
+                  </View>
                 </TouchableOpacity>
               );
             })}
