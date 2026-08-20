@@ -11,7 +11,12 @@ export const LandingFooter: React.FC<{
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8 pb-8 border-b border-slate-800">
           {/* Col 1 */}
           <div className="space-y-3 md:col-span-1">
-            <div className="flex items-center gap-2.5">
+            <div
+              className="flex items-center gap-2.5 cursor-pointer"
+              onClick={() => {
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+            >
               <img 
                 src="/logo.png" 
                 alt="KwikBill Logo" 
