@@ -3,107 +3,87 @@ import { AuthRequest } from "../middleware/auth.ts";
 import { getAllTenants, updateTenantSubscription } from "../db/users.ts";
 import { db } from "../db/index.ts";
 import { users } from "../db/schema.ts";
+import { createPlanRequest, getAllPlanRequests, updatePlanRequestStatus } from "../db/planRequests.ts";
+import { asyncHandler, ApiResponse, BadRequestError, parsePositiveInt } from "../utils/apiResponse.ts";
 
-export async function getTenants(req: AuthRequest, res: Response) {
-  try {
-    const tenants = await getAllTenants();
-    res.json({ success: true, tenants });
-  } catch (error: any) {
-    console.error("Failed to fetch tenants:", error);
-    res.status(500).json({ error: error.message || "Failed to fetch tenants" });
+export const getTenants = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const tenants = await getAllTenants();
+  return ApiResponse.success(res, { tenants });
+});
+
+export const postTenant = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const { email, businessName, phone, industryType, subscriptionPlan, upiId } = req.body;
+  if (!email || !email.trim()) {
+    throw new BadRequestError("Company email is required.");
   }
-}
 
-export async function postTenant(req: AuthRequest, res: Response) {
-  try {
-    const { email, businessName, phone, industryType, subscriptionPlan, upiId } = req.body;
-    if (!email) {
-      return res.status(400).json({ error: "Company email is required." });
-    }
+  const generatedUid = `manual-onboard-${Date.now()}`;
 
-    const generatedUid = `manual-onboard-${Date.now()}`;
+  const created = await db.insert(users).values({
+    uid: generatedUid,
+    email: email.trim(),
+    businessName: businessName || 'New Business Client',
+    phone: phone || '',
+    upiId: upiId || '',
+    industryType: industryType || 'transport',
+    subscriptionPlan: subscriptionPlan || 'pro_499',
+    subscriptionStatus: 'active',
+    role: 'subscriber',
+  }).returning();
 
-    const created = await db.insert(users).values({
-      uid: generatedUid,
-      email,
-      businessName: businessName || 'New Business Client',
-      phone: phone || '',
-      upiId: upiId || '',
-      industryType: industryType || 'transport',
-      subscriptionPlan: subscriptionPlan || 'pro_499',
-      subscriptionStatus: 'active',
-      role: 'subscriber',
-    }).returning();
+  return ApiResponse.success(res, { tenant: created[0] }, 201, "Tenant onboarded successfully");
+});
 
-    res.json({ success: true, tenant: created[0] });
-  } catch (error: any) {
-    console.error("Failed to onboard tenant:", error);
-    res.status(500).json({ error: error.message || "Failed to onboard tenant" });
+export const putTenantSubscription = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const tenantId = parsePositiveInt(req.params.id, "tenant ID");
+  const { plan, status } = req.body;
+  if (!plan || !status) {
+    throw new BadRequestError("Both plan and status are required.");
   }
-}
+  const updated = await updateTenantSubscription(tenantId, plan, status);
+  return ApiResponse.success(res, { tenant: updated });
+});
 
-export async function putTenantSubscription(req: AuthRequest, res: Response) {
-  try {
-    const tenantId = parseInt(req.params.id);
-    const { plan, status } = req.body;
-    const updated = await updateTenantSubscription(tenantId, plan, status);
-    res.json({ success: true, tenant: updated });
-  } catch (error: any) {
-    console.error("Failed to update tenant subscription:", error);
-    res.status(500).json({ error: error.message || "Failed to update subscription" });
+export const submitPlanRequest = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const userId = req.dbUser.id;
+  const { businessName, contactPerson, email, phone, industryType, requestedPlan, businessNeeds } = req.body;
+
+  if (!businessName || !contactPerson || !phone || !requestedPlan) {
+    throw new BadRequestError("Business name, contact person, phone, and requested plan are required.");
   }
-}
 
-export async function submitPlanRequest(req: AuthRequest, res: Response) {
-  try {
-    const userId = req.dbUser.id;
-    const { businessName, contactPerson, email, phone, industryType, requestedPlan, businessNeeds } = req.body;
+  const created = await createPlanRequest(userId, {
+    businessName,
+    contactPerson,
+    email: email || req.dbUser.email,
+    phone,
+    industryType: industryType || 'general',
+    requestedPlan,
+    businessNeeds,
+  });
 
-    const { createPlanRequest } = await import("../db/planRequests.ts");
-    const created = await createPlanRequest(userId, {
-      businessName,
-      contactPerson,
-      email: email || req.dbUser.email,
-      phone,
-      industryType: industryType || 'general',
-      requestedPlan,
-      businessNeeds,
-    });
+  return ApiResponse.success(res, { request: created }, 201, "Plan request submitted successfully");
+});
 
-    res.json({ success: true, request: created });
-  } catch (error: any) {
-    console.error("Failed to submit plan request:", error);
-    res.status(500).json({ error: error.message || "Failed to submit plan request" });
+export const getPlanRequestsList = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const requests = await getAllPlanRequests();
+  return ApiResponse.success(res, { requests });
+});
+
+export const putPlanRequestStatus = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const requestId = parsePositiveInt(req.params.id, "plan request ID");
+  const { status, approveAsSubscriber, userId, requestedPlan } = req.body;
+
+  if (!status) {
+    throw new BadRequestError("Status is required.");
   }
-}
 
-export async function getPlanRequestsList(req: AuthRequest, res: Response) {
-  try {
-    const { getAllPlanRequests } = await import("../db/planRequests.ts");
-    const requests = await getAllPlanRequests();
-    res.json({ success: true, requests });
-  } catch (error: any) {
-    console.error("Failed to fetch plan requests:", error);
-    res.status(500).json({ error: error.message || "Failed to fetch plan requests" });
+  const updated = await updatePlanRequestStatus(requestId, status);
+
+  // If approving, also activate the user's subscription
+  if (approveAsSubscriber && userId && requestedPlan) {
+    await updateTenantSubscription(Number(userId), requestedPlan, 'active');
   }
-}
 
-export async function putPlanRequestStatus(req: AuthRequest, res: Response) {
-  try {
-    const requestId = parseInt(req.params.id);
-    const { status, approveAsSubscriber, userId, requestedPlan } = req.body;
-    const { updatePlanRequestStatus } = await import("../db/planRequests.ts");
-    const updated = await updatePlanRequestStatus(requestId, status);
-
-    // If approving, also activate the user's subscription
-    if (approveAsSubscriber && userId && requestedPlan) {
-      await updateTenantSubscription(userId, requestedPlan, 'active');
-    }
-
-    res.json({ success: true, request: updated });
-  } catch (error: any) {
-    console.error("Failed to update plan request status:", error);
-    res.status(500).json({ error: error.message || "Failed to update plan request status" });
-  }
-}
-
+  return ApiResponse.success(res, { request: updated });
+});

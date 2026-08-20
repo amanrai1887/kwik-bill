@@ -69,9 +69,16 @@ export const PLAN_CONFIG: Record<SubscriptionPlan, PlanLimits> = {
   },
 };
 
+export function isSuperAdminUser(userOrProfile?: { role?: string; email?: string | null } | null): boolean {
+  if (!userOrProfile) return false;
+  if (userOrProfile.role === 'superadmin') return true;
+  const email = userOrProfile.email?.toLowerCase();
+  return email === 'arai.343531@gmail.com';
+}
+
 export function getPlanLimits(profile: UserProfile | null): PlanLimits {
   if (!profile) return PLAN_CONFIG.trial_15_days;
-  if (profile.role === 'superadmin' || profile.email?.toLowerCase() === 'arai.343531@gmail.com') {
+  if (isSuperAdminUser(profile)) {
     return PLAN_CONFIG.pro_499;
   }
   const plan = profile.subscriptionPlan || 'trial_15_days';
@@ -80,7 +87,7 @@ export function getPlanLimits(profile: UserProfile | null): PlanLimits {
 
 export function isPlanExpired(profile: UserProfile | null): boolean {
   if (!profile) return false;
-  if (profile.role === 'superadmin' || profile.email?.toLowerCase() === 'arai.343531@gmail.com') {
+  if (isSuperAdminUser(profile)) {
     return false;
   }
   if (profile.subscriptionStatus === 'expired' || profile.subscriptionStatus === 'inactive') {

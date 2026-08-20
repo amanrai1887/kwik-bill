@@ -17,6 +17,7 @@ import {
   Keyboard
 } from 'lucide-react';
 import { UserProfile } from '../lib/types.ts';
+import { getPlanLimits, isSuperAdminUser } from '../lib/planConfig.ts';
 import { useAuth } from '../lib/AuthContext.tsx';
 import { useTheme } from '../context/ThemeContext.tsx';
 
@@ -42,10 +43,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const { user, logout } = useAuth();
   const { isDark, toggleTheme } = useTheme();
 
-  const isSuperAdmin = 
-    profile?.role === 'superadmin' || 
-    user?.email?.toLowerCase() === 'arai.343531@gmail.com' ||
-    profile?.email?.toLowerCase() === 'arai.343531@gmail.com';
+  const isSuperAdmin = isSuperAdminUser(profile) || isSuperAdminUser(user);
 
   const isPro = profile?.subscriptionPlan === 'pro_499' || isSuperAdmin;
 

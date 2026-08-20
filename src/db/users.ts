@@ -1,6 +1,7 @@
 import { db } from './index.ts';
 import { users } from './schema.ts';
 import { eq } from 'drizzle-orm';
+import { isSuperAdminEmail } from '../config/app.config.ts';
 
 export async function getOrCreateUser(uid: string, email: string, businessName?: string) {
   try {
@@ -9,8 +10,8 @@ export async function getOrCreateUser(uid: string, email: string, businessName?:
       return existing[0];
     }
 
-    const isSuperAdminEmail = email.toLowerCase() === 'arai.343531@gmail.com';
-    const role = isSuperAdminEmail ? 'superadmin' : 'subscriber';
+    const isAdmin = isSuperAdminEmail(email);
+    const role = isAdmin ? 'superadmin' : 'subscriber';
     
     // 15 Days trial calculation
     const trialDays = 15;
@@ -21,22 +22,21 @@ export async function getOrCreateUser(uid: string, email: string, businessName?:
         uid,
         email,
         role,
-        businessName: businessName || (isSuperAdminEmail ? 'Platform SuperAdmin' : 'My Business'),
+        businessName: businessName || (isAdmin ? 'Platform SuperAdmin' : 'My Business'),
         upiId: '',
         phone: '',
         gstin: '',
         address: '',
         industryType: 'transport',
-        subscriptionPlan: isSuperAdminEmail ? 'pro_499' : 'trial_15_days',
-        subscriptionStatus: isSuperAdminEmail ? 'active' : 'trial',
-        trialEndsAt: isSuperAdminEmail ? null : trialEndsAt,
+        subscriptionPlan: isAdmin ? 'pro_499' : 'trial_15_days',
+        subscriptionStatus: isAdmin ? 'active' : 'trial',
+        trialEndsAt: isAdmin ? null : trialEndsAt,
       })
-
       .onConflictDoUpdate({
         target: users.uid,
         set: {
           email,
-          role: isSuperAdminEmail ? 'superadmin' : users.role,
+          role: isAdmin ? 'superadmin' : users.role,
           updatedAt: new Date(),
         },
       })
@@ -77,7 +77,6 @@ export async function updateUserProfile(userId: number, data: any) {
   }
 }
 
-
 export async function getAllTenants() {
   try {
     const allUsers = await db.select().from(users).orderBy(users.id);
@@ -104,4 +103,3 @@ export async function updateTenantSubscription(userId: number, plan: string, sta
     throw new Error("Failed to update tenant subscription.", { cause: error });
   }
 }
-

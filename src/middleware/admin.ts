@@ -1,5 +1,6 @@
 import { Response, NextFunction } from "express";
 import { AuthRequest } from "./auth.ts";
+import { isSuperAdminEmail } from "../config/app.config.ts";
 
 export const requireSuperAdmin = (
   req: AuthRequest, 
@@ -8,10 +9,17 @@ export const requireSuperAdmin = (
 ) => {
   const isSuperAdmin = 
     req.dbUser?.role === 'superadmin' || 
-    (req.user?.email && req.user.email.toLowerCase() === 'arai.343531@gmail.com');
+    isSuperAdminEmail(req.user?.email) ||
+    isSuperAdminEmail(req.dbUser?.email);
 
   if (!isSuperAdmin) {
-    return res.status(403).json({ error: "Access Denied: SuperAdmin privileges required." });
+    return res.status(403).json({ 
+      success: false, 
+      error: {
+        code: 'FORBIDDEN',
+        message: "Access Denied: SuperAdmin privileges required." 
+      }
+    });
   }
   next();
 };

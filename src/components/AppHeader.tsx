@@ -11,6 +11,7 @@ import {
   ExternalLink
 } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext.tsx';
+import { isSuperAdminUser } from '../lib/planConfig.ts';
 
 import { UserProfile } from '../lib/types.ts';
 import { AppTab } from './Sidebar.tsx';
@@ -35,10 +36,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   const { user, logout } = useAuth();
 
 
-  const isSuperAdmin = 
-    profile?.role === 'superadmin' || 
-    user?.email?.toLowerCase() === 'arai.343531@gmail.com' ||
-    profile?.email?.toLowerCase() === 'arai.343531@gmail.com';
+  const isSuperAdmin = isSuperAdminUser(profile) || isSuperAdminUser(user);
 
   const tabTitles: Record<AppTab, { title: string; subtitle: string }> = {
     dashboard: { title: 'Dashboard Overview', subtitle: 'Real-time billing & collection tracking' },

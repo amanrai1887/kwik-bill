@@ -1,5 +1,22 @@
 import { auth } from './firebase.ts';
 
+/**
+ * Standardized HTTP error class containing HTTP status, error code and server message
+ */
+export class ApiClientError extends Error {
+  public status: number;
+  public code: string;
+  public details?: any;
+
+  constructor(message: string, status = 500, code = 'API_ERROR', details?: any) {
+    super(message);
+    this.name = 'ApiClientError';
+    this.status = status;
+    this.code = code;
+    this.details = details;
+  }
+}
+
 async function getAuthHeaders(): Promise<Record<string, string>> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -22,93 +39,91 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
   return headers;
 }
 
-export async function fetchProfile() {
+/**
+ * Centralized fetch helper for type-safe requests and structured error handling
+ */
+async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const headers = await getAuthHeaders();
-  const res = await fetch('/api/user/profile', { headers });
-  if (!res.ok) throw new Error('Failed to load profile');
-  return res.json();
+  const res = await fetch(endpoint, {
+    ...options,
+    headers: {
+      ...headers,
+      ...(options.headers || {}),
+    },
+  });
+
+  let data: any;
+  try {
+    data = await res.json();
+  } catch {
+    data = null;
+  }
+
+  if (!res.ok) {
+    const errorMsg =
+      data?.error?.message ||
+      data?.error ||
+      data?.message ||
+      `HTTP Error ${res.status}: ${res.statusText}`;
+    const errorCode = data?.error?.code || `HTTP_${res.status}`;
+    throw new ApiClientError(errorMsg, res.status, errorCode, data?.error?.details);
+  }
+
+  return data as T;
+}
+
+// User & Workspace Profile
+export async function fetchProfile() {
+  return request<{ success: boolean; user: any }>('/api/user/profile');
 }
 
 export async function updateProfile(data: any) {
-  const headers = await getAuthHeaders();
-  const res = await fetch('/api/user/profile', {
+  return request<{ success: boolean; user: any }>('/api/user/profile', {
     method: 'PUT',
-    headers,
     body: JSON.stringify(data),
   });
-  if (!res.ok) throw new Error('Failed to update profile');
-  return res.json();
 }
 
 export async function resetWorkspace() {
-  const headers = await getAuthHeaders();
-  const res = await fetch('/api/user/reset', {
+  return request<{ success: boolean; message: string }>('/api/user/reset', {
     method: 'POST',
-    headers,
   });
-  if (!res.ok) throw new Error('Failed to reset workspace data');
-  return res.json();
 }
 
-
+// Clients Directory
 export async function fetchClients() {
-  const headers = await getAuthHeaders();
-  const res = await fetch('/api/clients', { headers });
-  if (!res.ok) throw new Error('Failed to fetch clients');
-  return res.json();
+  return request<{ success: boolean; clients: any[] }>('/api/clients');
 }
 
 export async function createClient(data: any) {
-  const headers = await getAuthHeaders();
-  const res = await fetch('/api/clients', {
+  return request<{ success: boolean; client: any }>('/api/clients', {
     method: 'POST',
-    headers,
     body: JSON.stringify(data),
   });
-  if (!res.ok) throw new Error('Failed to create client');
-  return res.json();
 }
 
 export async function updateClient(id: number, data: any) {
-  const headers = await getAuthHeaders();
-  const res = await fetch(`/api/clients/${id}`, {
+  return request<{ success: boolean; client: any }>(`/api/clients/${id}`, {
     method: 'PUT',
-    headers,
     body: JSON.stringify(data),
   });
-  if (!res.ok) throw new Error('Failed to update client');
-  return res.json();
 }
 
 export async function toggleClientStatus(id: number, isActive?: boolean) {
-  const headers = await getAuthHeaders();
-  const res = await fetch(`/api/clients/${id}/toggle-status`, {
+  return request<{ success: boolean; client: any }>(`/api/clients/${id}/toggle-status`, {
     method: 'PATCH',
-    headers,
     body: JSON.stringify({ isActive }),
   });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || 'Failed to update client status');
-  }
-  return res.json();
 }
 
 export async function deleteClient(id: number) {
-  const headers = await getAuthHeaders();
-  const res = await fetch(`/api/clients/${id}`, {
+  return request<{ success: boolean; message?: string }>(`/api/clients/${id}`, {
     method: 'DELETE',
-    headers,
   });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || 'Failed to delete client');
-  }
-  return res.json();
 }
 
+// Invoices
 export async function fetchInvoices(params?: { page?: number; limit?: number; status?: string; search?: string }) {
-  const headers = await getAuthHeaders();
   let url = '/api/invoices';
   if (params) {
     const q = new URLSearchParams();
@@ -119,97 +134,87 @@ export async function fetchInvoices(params?: { page?: number; limit?: number; st
     const qs = q.toString();
     if (qs) url += `?${qs}`;
   }
-  const res = await fetch(url, { headers });
-  if (!res.ok) throw new Error('Failed to fetch invoices');
-  return res.json();
+  return request<{ success: boolean; invoices: any[]; pagination?: any }>(url);
 }
 
 export async function fetchInvoiceById(id: number) {
-  const headers = await getAuthHeaders();
-  const res = await fetch(`/api/invoices/${id}`, { headers });
-  if (!res.ok) throw new Error('Failed to fetch invoice');
-  return res.json();
+  return request<{ success: boolean; invoice: any }>(`/api/invoices/${id}`);
 }
 
 export async function createInvoice(data: any) {
-  const headers = await getAuthHeaders();
-  const res = await fetch('/api/invoices', {
+  return request<{ success: boolean; invoice: any }>('/api/invoices', {
     method: 'POST',
-    headers,
     body: JSON.stringify(data),
   });
-  if (!res.ok) throw new Error('Failed to create invoice');
-  return res.json();
 }
 
 export async function updateInvoiceStatus(id: number, status: string, paidAmount?: string) {
-  const headers = await getAuthHeaders();
-  const res = await fetch(`/api/invoices/${id}/status`, {
+  return request<{ success: boolean; invoice: any }>(`/api/invoices/${id}/status`, {
     method: 'PUT',
-    headers,
     body: JSON.stringify({ status, paidAmount }),
   });
-  if (!res.ok) throw new Error('Failed to update invoice status');
-  return res.json();
 }
 
-export async function deleteInvoice(id: number) {
-  const headers = await getAuthHeaders();
-  const res = await fetch(`/api/invoices/${id}`, {
+export async function deleteInvoice(id: number, reason?: string) {
+  return request<{ success: boolean; message?: string }>(`/api/invoices/${id}`, {
     method: 'DELETE',
-    headers,
+    body: reason ? JSON.stringify({ reason }) : undefined,
   });
-  if (!res.ok) throw new Error('Failed to delete invoice');
-  return res.json();
+}
+
+// Payments
+export async function fetchPayments() {
+  return request<{ success: boolean; payments: any[] }>('/api/payments');
 }
 
 export async function recordPayment(data: any) {
-  const headers = await getAuthHeaders();
-  const res = await fetch('/api/payments', {
+  return request<{ success: boolean; payment: any }>('/api/payments', {
     method: 'POST',
-    headers,
     body: JSON.stringify(data),
   });
-  if (!res.ok) throw new Error('Failed to record payment');
-  return res.json();
 }
 
+// WhatsApp & Reminders
 export async function sendWhatsAppReminder(data: {
   invoiceId: number;
   clientId: number;
   templateType: string;
+  templateName?: string;
+  recipientName?: string;
+  invoiceNumber?: string;
+  totalAmount?: string | number;
+  dueDate?: string;
   messageContent: string;
   recipientPhone: string;
+  sendMethod?: string;
+  pdfUrl?: string;
+  sendAsDocument?: boolean;
 }) {
-  const headers = await getAuthHeaders();
-  const res = await fetch('/api/reminders/send', {
+  return request<{
+    success: boolean;
+    directApiSent: boolean;
+    deliveryStatus: string;
+    log: any;
+    whatsappUrl: string;
+    apiResponse?: any;
+  }>('/api/reminders/send', {
     method: 'POST',
-    headers,
     body: JSON.stringify(data),
   });
-  if (!res.ok) throw new Error('Failed to send WhatsApp reminder');
-  return res.json();
 }
 
 export async function fetchReminderLogs() {
-  const headers = await getAuthHeaders();
-  const res = await fetch('/api/reminders/logs', { headers });
-  if (!res.ok) throw new Error('Failed to fetch reminder logs');
-  return res.json();
+  return request<{ success: boolean; logs: any[] }>('/api/reminders/logs');
 }
 
+// Analytics
 export async function fetchAnalytics() {
-  const headers = await getAuthHeaders();
-  const res = await fetch('/api/analytics', { headers });
-  if (!res.ok) throw new Error('Failed to fetch analytics');
-  return res.json();
+  return request<any>('/api/analytics');
 }
 
+// Admin Console
 export async function fetchAdminTenants() {
-  const headers = await getAuthHeaders();
-  const res = await fetch('/api/admin/tenants', { headers });
-  if (!res.ok) throw new Error('Failed to fetch tenants');
-  return res.json();
+  return request<{ success: boolean; tenants: any[] }>('/api/admin/tenants');
 }
 
 export async function createAdminTenant(data: {
@@ -220,25 +225,17 @@ export async function createAdminTenant(data: {
   subscriptionPlan: string;
   upiId?: string;
 }) {
-  const headers = await getAuthHeaders();
-  const res = await fetch('/api/admin/tenants', {
+  return request<{ success: boolean; tenant: any }>('/api/admin/tenants', {
     method: 'POST',
-    headers,
     body: JSON.stringify(data),
   });
-  if (!res.ok) throw new Error('Failed to onboard business client');
-  return res.json();
 }
 
 export async function updateAdminTenantSubscription(tenantId: number, plan: string, status: string) {
-  const headers = await getAuthHeaders();
-  const res = await fetch(`/api/admin/tenants/${tenantId}/subscription`, {
+  return request<{ success: boolean; tenant: any }>(`/api/admin/tenants/${tenantId}/subscription`, {
     method: 'PUT',
-    headers,
     body: JSON.stringify({ plan, status }),
   });
-  if (!res.ok) throw new Error('Failed to update tenant subscription');
-  return res.json();
 }
 
 export async function submitPlanRequestApi(data: {
@@ -250,21 +247,14 @@ export async function submitPlanRequestApi(data: {
   requestedPlan: string;
   businessNeeds?: string;
 }) {
-  const headers = await getAuthHeaders();
-  const res = await fetch('/api/user/plan-request', {
+  return request<{ success: boolean; request: any }>('/api/user/plan-request', {
     method: 'POST',
-    headers,
     body: JSON.stringify(data),
   });
-  if (!res.ok) throw new Error('Failed to submit plan request');
-  return res.json();
 }
 
 export async function fetchAdminPlanRequests() {
-  const headers = await getAuthHeaders();
-  const res = await fetch('/api/admin/plan-requests', { headers });
-  if (!res.ok) throw new Error('Failed to fetch plan requests');
-  return res.json();
+  return request<{ success: boolean; requests: any[] }>('/api/admin/plan-requests');
 }
 
 export async function updateAdminPlanRequestStatus(id: number, data: {
@@ -273,71 +263,53 @@ export async function updateAdminPlanRequestStatus(id: number, data: {
   userId?: number;
   requestedPlan?: string;
 }) {
-  const headers = await getAuthHeaders();
-  const res = await fetch(`/api/admin/plan-requests/${id}`, {
+  return request<{ success: boolean; request: any }>(`/api/admin/plan-requests/${id}`, {
     method: 'PUT',
-    headers,
     body: JSON.stringify(data),
   });
-  if (!res.ok) throw new Error('Failed to update plan request status');
-  return res.json();
 }
 
-// Recurring Invoices API
+// Recurring Invoices
 export async function fetchRecurringProfiles() {
-  const headers = await getAuthHeaders();
-  const res = await fetch('/api/recurring', { headers });
-  if (!res.ok) throw new Error('Failed to fetch recurring profiles');
-  return res.json();
+  return request<{ success: boolean; profiles: any[] }>('/api/recurring');
 }
 
 export async function createRecurringProfile(data: any) {
-  const headers = await getAuthHeaders();
-  const res = await fetch('/api/recurring', {
+  return request<{ success: boolean; profile: any }>('/api/recurring', {
     method: 'POST',
-    headers,
     body: JSON.stringify(data),
   });
-  if (!res.ok) throw new Error('Failed to create recurring profile');
-  return res.json();
 }
 
 export async function toggleRecurringProfile(id: number) {
-  const headers = await getAuthHeaders();
-  const res = await fetch(`/api/recurring/${id}/toggle`, {
+  return request<{ success: boolean; profile: any }>(`/api/recurring/${id}/toggle`, {
     method: 'PUT',
-    headers,
   });
-  if (!res.ok) throw new Error('Failed to toggle recurring profile');
-  return res.json();
 }
 
 export async function deleteRecurringProfile(id: number) {
-  const headers = await getAuthHeaders();
-  const res = await fetch(`/api/recurring/${id}`, {
+  return request<{ success: boolean; message: string }>(`/api/recurring/${id}`, {
     method: 'DELETE',
-    headers,
   });
-  if (!res.ok) throw new Error('Failed to delete recurring profile');
-  return res.json();
 }
 
 export async function triggerManualRecurringRun() {
-  const headers = await getAuthHeaders();
-  const res = await fetch('/api/recurring/trigger-run', {
+  return request<{ success: boolean; result: any }>('/api/recurring/trigger-run', {
     method: 'POST',
-    headers,
   });
-  if (!res.ok) throw new Error('Failed to run recurring engine');
-  return res.json();
 }
 
-// Razorpay Order Creation API
+// Razorpay Checkout
 export async function createRazorpayOrderApi(amountInPaise: number, planId?: string, notes?: Record<string, any>) {
-  const headers = await getAuthHeaders();
-  const res = await fetch('/api/create-order', {
+  return request<{
+    success: boolean;
+    order_id: string;
+    amount: number;
+    currency: string;
+    key_id: string;
+    receipt: string;
+  }>('/api/create-order', {
     method: 'POST',
-    headers,
     body: JSON.stringify({
       amount: amountInPaise,
       currency: 'INR',
@@ -345,33 +317,23 @@ export async function createRazorpayOrderApi(amountInPaise: number, planId?: str
       notes,
     }),
   });
-  const data = await res.json();
-  if (!res.ok || !data.success) {
-    throw new Error(data.error || 'Failed to create Razorpay payment order');
-  }
-  return data;
 }
 
-// Razorpay Payment Signature Verification API
 export async function verifyRazorpayPaymentApi(payload: {
   razorpay_order_id: string;
   razorpay_payment_id: string;
   razorpay_signature: string;
   planId?: string;
 }) {
-  const headers = await getAuthHeaders();
-  const res = await fetch('/api/verify-payment', {
+  return request<{
+    success: boolean;
+    message: string;
+    payment_id: string;
+    order_id: string;
+    planId?: string;
+    user?: any;
+  }>('/api/verify-payment', {
     method: 'POST',
-    headers,
     body: JSON.stringify(payload),
   });
-  const data = await res.json();
-  if (!res.ok || !data.success) {
-    throw new Error(data.error || 'Payment signature verification failed');
-  }
-  return data;
 }
-
-
-
-

@@ -85,45 +85,47 @@ export async function toggleClientActive(userId: number, clientId: number, isAct
 
 export async function deleteClient(userId: number, clientId: number) {
   try {
-    // 1. Get all invoice IDs belonging to this client
-    const clientInvoices = await db
-      .select({ id: invoices.id })
-      .from(invoices)
-      .where(and(eq(invoices.clientId, clientId), eq(invoices.userId, userId)));
-
-    const invoiceIds = clientInvoices.map((inv) => inv.id);
-
-    // 2. Delete payments for these invoices if any exist
-    if (invoiceIds.length > 0) {
-      await db
-        .delete(payments)
-        .where(and(eq(payments.userId, userId), inArray(payments.invoiceId, invoiceIds)));
-    }
-
-    // 3. Delete reminder logs associated with this client
-    await db
-      .delete(reminderLogs)
-      .where(and(eq(reminderLogs.clientId, clientId), eq(reminderLogs.userId, userId)));
-
-    // 4. Delete recurring profiles for this client
-    await db
-      .delete(recurringProfiles)
-      .where(and(eq(recurringProfiles.clientId, clientId), eq(recurringProfiles.userId, userId)));
-
-    // 5. Delete invoices for this client
-    if (invoiceIds.length > 0) {
-      await db
-        .delete(invoices)
+    return await db.transaction(async (tx) => {
+      // 1. Get all invoice IDs belonging to this client
+      const clientInvoices = await tx
+        .select({ id: invoices.id })
+        .from(invoices)
         .where(and(eq(invoices.clientId, clientId), eq(invoices.userId, userId)));
-    }
 
-    // 6. Delete the client
-    const deleted = await db
-      .delete(clients)
-      .where(and(eq(clients.id, clientId), eq(clients.userId, userId)))
-      .returning();
+      const invoiceIds = clientInvoices.map((inv) => inv.id);
 
-    return deleted[0];
+      // 2. Delete payments for these invoices if any exist
+      if (invoiceIds.length > 0) {
+        await tx
+          .delete(payments)
+          .where(and(eq(payments.userId, userId), inArray(payments.invoiceId, invoiceIds)));
+      }
+
+      // 3. Delete reminder logs associated with this client
+      await tx
+        .delete(reminderLogs)
+        .where(and(eq(reminderLogs.clientId, clientId), eq(reminderLogs.userId, userId)));
+
+      // 4. Delete recurring profiles for this client
+      await tx
+        .delete(recurringProfiles)
+        .where(and(eq(recurringProfiles.clientId, clientId), eq(recurringProfiles.userId, userId)));
+
+      // 5. Delete invoices for this client
+      if (invoiceIds.length > 0) {
+        await tx
+          .delete(invoices)
+          .where(and(eq(invoices.clientId, clientId), eq(invoices.userId, userId)));
+      }
+
+      // 6. Delete the client
+      const deleted = await tx
+        .delete(clients)
+        .where(and(eq(clients.id, clientId), eq(clients.userId, userId)))
+        .returning();
+
+      return deleted[0];
+    });
   } catch (error: any) {
     console.error("Failed to delete client:", error);
     throw new Error(error?.message || "Failed to delete client.", { cause: error });

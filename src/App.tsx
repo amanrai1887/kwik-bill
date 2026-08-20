@@ -35,13 +35,14 @@ import {
   fetchInvoices,
   createInvoice,
   deleteInvoice,
+  createRecurringProfile,
   recordPayment,
   sendWhatsAppReminder,
   fetchReminderLogs,
   fetchAnalytics,
 } from './lib/api.ts';
 import { AnalyticsData, Client, Invoice, ReminderLog, UserProfile } from './lib/types.ts';
-import { getPlanLimits } from './lib/planConfig.ts';
+import { getPlanLimits, isSuperAdminUser } from './lib/planConfig.ts';
 
 import { LoginModal } from './components/LoginModal.tsx';
 import { PublicInvoicePayView } from './components/PublicInvoicePayView.tsx';
@@ -180,9 +181,7 @@ function AppContent() {
     const freshProfile = await loadAllData();
     if (!freshProfile) return;
 
-    const isSuperAdmin =
-      freshProfile.role === 'superadmin' ||
-      freshProfile.email?.toLowerCase() === 'arai.343531@gmail.com';
+    const isSuperAdmin = isSuperAdminUser(freshProfile);
 
     if (isSuperAdmin) {
       setActiveTab('admin');
@@ -205,10 +204,7 @@ function AppContent() {
 
   // If superadmin logs in, lock view to Master Admin Console
   useEffect(() => {
-    const isSuperAdmin =
-      profile?.role === 'superadmin' ||
-      user?.email?.toLowerCase() === 'arai.343531@gmail.com' ||
-      profile?.email?.toLowerCase() === 'arai.343531@gmail.com';
+    const isSuperAdmin = isSuperAdminUser(profile) || isSuperAdminUser(user);
 
     if (isSuperAdmin && activeTab !== 'admin') {
       setActiveTab('admin');
@@ -229,7 +225,6 @@ function AppContent() {
       // If user checked "Also Save as Automated Recurring Schedule"
       if (invoiceData.isRecurring && isPro) {
         try {
-          const { createRecurringProfile } = await import('./lib/api.ts');
           await createRecurringProfile({
             clientId: invoiceData.clientId,
             title: `Recurring: ${invoiceData.items[0]?.description || 'Retainer Contract'}`,

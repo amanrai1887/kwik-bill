@@ -1,25 +1,16 @@
 import { Response } from "express";
 import { AuthRequest } from "../middleware/auth.ts";
-import { recordPayment, getPaymentsForUser } from "../db/payments.ts";
+import { recordPaymentService, getPaymentsService } from "../services/payments.service.ts";
+import { asyncHandler, ApiResponse } from "../utils/apiResponse.ts";
 
-export async function getPayments(req: AuthRequest, res: Response) {
-  try {
-    const userId = req.dbUser.id;
-    const list = await getPaymentsForUser(userId);
-    res.json({ success: true, payments: list });
-  } catch (error: any) {
-    console.error("Failed to get payments:", error);
-    res.status(500).json({ error: error.message || "Failed to get payments" });
-  }
-}
+export const getPayments = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const userId = req.dbUser.id;
+  const list = await getPaymentsService(userId);
+  return ApiResponse.success(res, { payments: list });
+});
 
-export async function postPayment(req: AuthRequest, res: Response) {
-  try {
-    const userId = req.dbUser.id;
-    const recorded = await recordPayment(userId, req.body);
-    res.json({ success: true, payment: recorded });
-  } catch (error: any) {
-    console.error("Failed to record payment:", error);
-    res.status(500).json({ error: error.message || "Failed to record payment" });
-  }
-}
+export const postPayment = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const userId = req.dbUser.id;
+  const recorded = await recordPaymentService(userId, req.body);
+  return ApiResponse.success(res, { payment: recorded }, 201, "Payment recorded successfully");
+});

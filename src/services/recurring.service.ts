@@ -1,28 +1,29 @@
-import { eq, and, lte, sql } from 'drizzle-orm';
-import { db } from '../db/index.ts';
-import { recurringProfiles, invoices, clients, users } from '../db/schema.ts';
 import { createInvoice } from '../db/invoices.ts';
+import { getDueRecurringProfiles, updateRecurringProfileNextRun } from '../db/recurring.ts';
+import { sendWhatsAppMessage, normalizeIndianPhoneNumber } from './whatsapp.service.ts';
 
 // Helper to compute next run date given current run date and frequency
 export function computeNextRunDate(currentDateStr: string, frequency: string, interval = 1): string {
   const current = new Date(currentDateStr);
   const next = new Date(current);
 
+  const safeInterval = Math.max(1, interval);
+
   switch (frequency) {
     case 'weekly':
-      next.setDate(next.getDate() + 7 * interval);
+      next.setDate(next.getDate() + 7 * safeInterval);
       break;
     case 'monthly':
-      next.setMonth(next.getMonth() + 1 * interval);
+      next.setMonth(next.getMonth() + 1 * safeInterval);
       break;
     case 'quarterly':
-      next.setMonth(next.getMonth() + 3 * interval);
+      next.setMonth(next.getMonth() + 3 * safeInterval);
       break;
     case 'yearly':
-      next.setFullYear(next.getFullYear() + 1 * interval);
+      next.setFullYear(next.getFullYear() + 1 * safeInterval);
       break;
     default:
-      next.setMonth(next.getMonth() + 1 * interval);
+      next.setMonth(next.getMonth() + 1 * safeInterval);
   }
 
   return next.toISOString().split('T')[0];
@@ -49,24 +50,9 @@ export async function processRecurringInvoices() {
 
   try {
     // Find all active profiles whose nextRunDate <= today
-    const dueProfiles = await db
-      .select({
-        profile: recurringProfiles,
-        client: clients,
-        merchant: users,
-      })
-      .from(recurringProfiles)
-      .innerJoin(clients, eq(recurringProfiles.clientId, clients.id))
-      .innerJoin(users, eq(recurringProfiles.userId, users.id))
-      .where(
-        and(
-          eq(recurringProfiles.isActive, true),
-          lte(recurringProfiles.nextRunDate, todayStr)
-        )
-      );
+    const dueProfiles = await getDueRecurringProfiles(todayStr);
 
     if (dueProfiles.length === 0) {
-      isRecurringProcessing = false;
       return { count: 0, generated: [] };
     }
 
@@ -110,68 +96,33 @@ export async function processRecurringInvoices() {
       const isExpired = p.endDate && nextRunDate > p.endDate;
 
       // Update recurring profile stats & next run date
-      await db
-        .update(recurringProfiles)
-        .set({
-          nextRunDate,
-          generatedCount: p.generatedCount + 1,
-          lastGeneratedAt: new Date(),
-          isActive: isExpired ? false : true,
-          updatedAt: new Date(),
-        })
-        .where(eq(recurringProfiles.id, p.id));
+      await updateRecurringProfileNextRun(
+        p.id, 
+        nextRunDate, 
+        p.generatedCount + 1, 
+        isExpired ? false : true
+      );
 
       // If autoSendWhatsApp is enabled, send direct WhatsApp notification
       if (p.autoSendWhatsApp && client.phone) {
-        const whatsappToken = merchant.whatsappApiToken || process.env.META_WHATSAPP_TOKEN;
-        const phoneNumberId = merchant.whatsappPhoneNumberId || process.env.META_PHONE_NUMBER_ID;
-
-        let cleanPhone = client.phone.replace(/[^0-9]/g, '');
-        if (cleanPhone.length === 10) {
-          cleanPhone = `91${cleanPhone}`;
-        }
-
+        const cleanPhone = normalizeIndianPhoneNumber(client.phone);
         const upiPayLink = merchant.upiId 
           ? `upi://pay?pa=${merchant.upiId}&pn=${encodeURIComponent(merchant.businessName || 'Business')}&am=${p.totalAmount}&cu=INR&tn=${encodeURIComponent(`Invoice ${invNumber}`)}`
           : '';
 
         const messageContent = `Hello *${client.name}*,\n\nGreetings from *${merchant.businessName || 'Our Business'}*! ✨\n\nYour automated recurring Invoice *#${invNumber}* for *₹${p.totalAmount}* has been generated for *${issueDate}* (Due: *${dueDate}*).\n\n${upiPayLink ? `📲 *Instant UPI Payment:*\n${upiPayLink}\n\n` : ''}Thank you for your valued partnership!`;
 
-        let deliveryStatus = 'logged';
-
-        if (whatsappToken && phoneNumberId) {
-          try {
-            const metaUrl = `https://graph.facebook.com/v19.0/${phoneNumberId}/messages`;
-            const metaRes = await fetch(metaUrl, {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${whatsappToken}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                messaging_product: 'whatsapp',
-                recipient_type: 'individual',
-                to: cleanPhone,
-                type: 'text',
-                text: { preview_url: true, body: messageContent },
-              }),
-            });
-
-            const metaData = await metaRes.json();
-            if (metaRes.ok && metaData.messages) {
-              deliveryStatus = 'delivered';
-              console.log(`[Auto-Billing Engine] WhatsApp message sent successfully to +${cleanPhone}`);
-            } else {
-              console.warn(`[Auto-Billing Engine] Meta WhatsApp Cloud API response error:`, JSON.stringify(metaData));
-              deliveryStatus = 'api_error';
-            }
-          } catch (apiErr) {
-            console.error(`[Auto-Billing Engine] Failed to dispatch automated WhatsApp message:`, apiErr);
-            deliveryStatus = 'api_error';
-          }
-        } else {
-          console.log(`[Auto-Billing Engine] WhatsApp credentials not found for user ${merchant.email}. Logged reminder locally.`);
-        }
+        await sendWhatsAppMessage({
+          recipientPhone: cleanPhone,
+          messageContent,
+          recipientName: client.name,
+          invoiceNumber: invNumber,
+          invoiceId: newInv.id,
+          totalAmount: p.totalAmount,
+          dueDate,
+          merchantToken: merchant.whatsappApiToken || undefined,
+          merchantPhoneNumberId: merchant.whatsappPhoneNumberId || undefined,
+        });
       }
 
       generatedInvoices.push({

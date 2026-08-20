@@ -1,5 +1,6 @@
 import { db, createPool } from './index.ts';
 import { sql } from 'drizzle-orm';
+import { config } from '../config/app.config.ts';
 
 export async function initializeDatabase() {
   const pool = createPool();
@@ -50,10 +51,13 @@ export async function initializeDatabase() {
 
 
 
-    // Assign superadmin role to arai.343531@gmail.com
-    await pool.query(`
-      UPDATE users SET role = 'superadmin' WHERE LOWER(email) = 'arai.343531@gmail.com';
-    `);
+    // Assign superadmin role to configured superadmins
+    if (config.superAdminEmails.length > 0) {
+      await pool.query(
+        `UPDATE users SET role = 'superadmin' WHERE LOWER(email) = ANY($1::text[]);`,
+        [config.superAdminEmails]
+      );
+    }
 
 
 

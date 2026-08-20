@@ -41,4 +41,9 @@ apiRouter.use("/analytics", analyticsRoutes);
 apiRouter.use("/admin", adminRoutes);
 apiRouter.use("/recurring", recurringRoutes);
 
+import { globalErrorHandler } from "../utils/apiResponse.ts";
+
+// Attach centralized global error handler for API
+apiRouter.use(globalErrorHandler);
+
 export default apiRouter;

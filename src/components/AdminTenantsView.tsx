@@ -26,6 +26,7 @@ import {
   fetchAdminPlanRequests,
   updateAdminPlanRequestStatus
 } from '../lib/api.ts';
+import { isSuperAdminUser } from '../lib/planConfig.ts';
 import { toast } from '../context/ToastContext.tsx';
 
 export const AdminTenantsView: React.FC = () => {
@@ -403,7 +404,7 @@ export const AdminTenantsView: React.FC = () => {
                 </tr>
               ) : (
                 filteredTenants.map((t) => {
-                  const isOwner = t.role === 'superadmin' || t.email === 'arai.343531@gmail.com';
+                  const isOwner = isSuperAdminUser(t);
                   return (
                     <tr key={t.id} className="hover:bg-slate-50/80 transition-colors">
                       <td className="py-3.5 px-4">
