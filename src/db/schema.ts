@@ -43,7 +43,7 @@ export const users = pgTable('users', {
 export const clients = pgTable('clients', {
   id: serial('id').primaryKey(),
   userId: integer('user_id')
-    .references(() => users.id)
+    .references(() => users.id, { onDelete: 'cascade' })
     .notNull(),
   name: text('name').notNull(),
   phone: text('phone').notNull(), // WhatsApp Phone number
@@ -54,6 +54,7 @@ export const clients = pgTable('clients', {
   industryType: text('industry_type').default('general'), // transport, agency, freelancer, consultant
   paymentTermDays: integer('payment_term_days').default(7),
   notes: text('notes').default(''),
+  isActive: boolean('is_active').default(true).notNull(),
   createdAt: timestamp('created_at').defaultNow(),
 });
 
@@ -61,10 +62,10 @@ export const clients = pgTable('clients', {
 export const invoices = pgTable('invoices', {
   id: serial('id').primaryKey(),
   userId: integer('user_id')
-    .references(() => users.id)
+    .references(() => users.id, { onDelete: 'cascade' })
     .notNull(),
   clientId: integer('client_id')
-    .references(() => clients.id)
+    .references(() => clients.id, { onDelete: 'cascade' })
     .notNull(),
   invoiceNumber: text('invoice_number').notNull(),
   issueDate: text('issue_date').notNull(), // YYYY-MM-DD
@@ -107,10 +108,10 @@ export const invoices = pgTable('invoices', {
 export const payments = pgTable('payments', {
   id: serial('id').primaryKey(),
   userId: integer('user_id')
-    .references(() => users.id)
+    .references(() => users.id, { onDelete: 'cascade' })
     .notNull(),
   invoiceId: integer('invoice_id')
-    .references(() => invoices.id)
+    .references(() => invoices.id, { onDelete: 'cascade' })
     .notNull(),
   amount: numeric('amount', { precision: 12, scale: 2 }).notNull(),
   paymentDate: text('payment_date').notNull(), // YYYY-MM-DD
@@ -124,13 +125,13 @@ export const payments = pgTable('payments', {
 export const reminderLogs = pgTable('reminder_logs', {
   id: serial('id').primaryKey(),
   userId: integer('user_id')
-    .references(() => users.id)
+    .references(() => users.id, { onDelete: 'cascade' })
     .notNull(),
   invoiceId: integer('invoice_id')
-    .references(() => invoices.id)
+    .references(() => invoices.id, { onDelete: 'cascade' })
     .notNull(),
   clientId: integer('client_id')
-    .references(() => clients.id)
+    .references(() => clients.id, { onDelete: 'cascade' })
     .notNull(),
   channel: text('channel').default('whatsapp').notNull(), // whatsapp | sms | email
   templateType: text('template_type').default('standard').notNull(), // polite | standard | urgent | overdue
@@ -144,7 +145,7 @@ export const reminderLogs = pgTable('reminder_logs', {
 export const planRequests = pgTable('plan_requests', {
   id: serial('id').primaryKey(),
   userId: integer('user_id')
-    .references(() => users.id)
+    .references(() => users.id, { onDelete: 'cascade' })
     .notNull(),
   businessName: text('business_name').notNull(),
   contactPerson: text('contact_person').notNull(),
@@ -161,10 +162,10 @@ export const planRequests = pgTable('plan_requests', {
 export const recurringProfiles = pgTable('recurring_profiles', {
   id: serial('id').primaryKey(),
   userId: integer('user_id')
-    .references(() => users.id)
+    .references(() => users.id, { onDelete: 'cascade' })
     .notNull(),
   clientId: integer('client_id')
-    .references(() => clients.id)
+    .references(() => clients.id, { onDelete: 'cascade' })
     .notNull(),
   title: text('title').default('Recurring Retainer Billing').notNull(),
   frequency: text('frequency').default('monthly').notNull(), // 'weekly' | 'monthly' | 'quarterly' | 'yearly'

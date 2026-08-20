@@ -71,8 +71,10 @@ export async function initializeDatabase() {
         industry_type TEXT DEFAULT 'general',
         payment_term_days INTEGER DEFAULT 7,
         notes TEXT DEFAULT '',
+        is_active BOOLEAN NOT NULL DEFAULT true,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
+      ALTER TABLE clients ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true;
     `);
 
     // Create invoices table

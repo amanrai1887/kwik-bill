@@ -24,6 +24,7 @@ export const ClientsScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
   const [clients, setClients] = useState<Client[]>([]);
   const [riskMap, setRiskMap] = useState<Record<number, any>>({});
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'disabled'>('all');
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -35,6 +36,7 @@ export const ClientsScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [gstin, setGstin] = useState('');
+  const [clientIsActive, setClientIsActive] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
   const loadClients = useCallback(async () => {
@@ -43,6 +45,7 @@ export const ClientsScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
         api.getClients(),
         api.getAnalytics().catch(() => null),
       ]);
+
       if (Array.isArray(clientsData)) setClients(clientsData);
       if (analyticsData?.clientRiskMap) setRiskMap(analyticsData.clientRiskMap);
     } catch (e) {
@@ -53,11 +56,12 @@ export const ClientsScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
     }
   }, []);
 
-  useFocusEffect(
-    useCallback(() => {
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
       loadClients();
-    }, [loadClients])
-  );
+    });
+    return unsubscribe;
+  }, [navigation, loadClients]);
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -71,6 +75,7 @@ export const ClientsScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
     setPhone('');
     setEmail('');
     setGstin('');
+    setClientIsActive(true);
     setIsModalOpen(true);
   };
 
@@ -81,7 +86,36 @@ export const ClientsScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
     setPhone(c.phone);
     setEmail(c.email || '');
     setGstin(c.gstin || '');
+    setClientIsActive(c.isActive !== false);
     setIsModalOpen(true);
+  };
+
+  const handleToggleStatus = async (clientId?: number, currentStatus?: boolean) => {
+    const targetId = clientId || editId;
+    if (!targetId) return;
+    const isCurrentlyActive = typeof currentStatus === 'boolean' ? currentStatus : clientIsActive;
+    const actionText = isCurrentlyActive ? 'disable' : 'enable';
+    Alert.alert(
+      `${isCurrentlyActive ? 'Disable' : 'Enable'} Client`,
+      `Are you sure you want to ${actionText} this client?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: isCurrentlyActive ? 'Disable' : 'Enable',
+          style: isCurrentlyActive ? 'destructive' : 'default',
+          onPress: async () => {
+            try {
+              await api.toggleClientStatus(targetId, !isCurrentlyActive);
+              setClientIsActive(!isCurrentlyActive);
+              loadClients();
+              if (editId) setIsModalOpen(false);
+            } catch (err: any) {
+              Alert.alert('Error', err.message || `Failed to ${actionText} client`);
+            }
+          },
+        },
+      ]
+    );
   };
 
   const handleSaveClient = async () => {
@@ -93,9 +127,9 @@ export const ClientsScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
     setIsSaving(true);
     try {
       if (editId) {
-        await api.updateClient(editId, { name, businessName, phone, email, gstin });
+        await api.updateClient(editId, { name, businessName, phone, email, gstin, isActive: clientIsActive });
       } else {
-        await api.createClient({ name, businessName, phone, email, gstin });
+        await api.createClient({ name, businessName, phone, email, gstin, isActive: true });
       }
       setIsModalOpen(false);
       loadClients();
@@ -119,7 +153,14 @@ export const ClientsScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
     });
   };
 
+  const activeCount = clients.filter((c) => c.isActive !== false).length;
+  const disabledCount = clients.filter((c) => c.isActive === false).length;
+
   const filteredClients = clients.filter((c) => {
+    const isClientActive = c.isActive !== false;
+    if (statusFilter === 'active' && !isClientActive) return false;
+    if (statusFilter === 'disabled' && isClientActive) return false;
+
     return (
       (c.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (c.businessName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -164,14 +205,31 @@ export const ClientsScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
         </View>
       </LinearGradient>
 
+      {/* Filter Tabs */}
+      <View style={styles.filterTabs}>
+        {[
+          { id: 'all', label: `All (${clients.length})` },
+          { id: 'active', label: `Active (${activeCount})` },
+          { id: 'disabled', label: `Disabled (${disabledCount})` },
+        ].map((f) => (
+          <TouchableOpacity
+            key={f.id}
+            onPress={() => setStatusFilter(f.id as any)}
+            style={[styles.filterChip, statusFilter === f.id && styles.filterChipActive]}
+          >
+            <Text style={[styles.filterChipText, statusFilter === f.id && styles.filterChipTextActive]}>
+              {f.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
       {/* Directory Meta Ribbon */}
       <View style={styles.metaRibbon}>
         <Text style={styles.metaRibbonText}>
-          {t('client_ledger_crm', 'CLIENT LEDGER DIRECTORY')} • <Text style={styles.metaHighlight}>{filteredClients.length} {t('parties_onboarded', 'PARTIES ONBOARDED')}</Text>
+          {t('client_ledger_crm', 'CLIENT LEDGER DIRECTORY')} • <Text style={styles.metaHighlight}>{filteredClients.length} {t('parties_onboarded', 'PARTIES SHOWN')}</Text>
         </Text>
       </View>
-
-
 
       {/* Clients FlatList */}
       {isLoading && !refreshing ? (
@@ -185,66 +243,94 @@ export const ClientsScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#4f46e5" />}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
-          renderItem={({ item }) => (
-            <TouchableOpacity style={styles.clientCard} onPress={() => openEditModal(item)} activeOpacity={0.8}>
-              <View style={styles.cardHeader}>
-                <View style={styles.avatarWrap}>
-                  <Text style={styles.avatarText}>
-                    {(item.name || 'C').charAt(0).toUpperCase()}
-                  </Text>
-                </View>
+          renderItem={({ item }) => {
+            const isClientActive = item.isActive !== false;
 
-                <View style={{ flex: 1, marginLeft: 12 }}>
-                  <Text style={styles.clientName}>{item.name}</Text>
-                  {item.businessName ? (
-                    <Text style={styles.bizName}>{item.businessName}</Text>
-                  ) : null}
-                  <Text style={styles.phoneText}>+91 {item.phone}</Text>
+            return (
+              <TouchableOpacity
+                style={[styles.clientCard, !isClientActive && styles.clientCardDisabled]}
+                onPress={() => openEditModal(item)}
+                activeOpacity={0.8}
+              >
+                <View style={styles.cardHeader}>
+                  <View style={[styles.avatarWrap, !isClientActive && styles.avatarWrapDisabled]}>
+                    <Text style={[styles.avatarText, !isClientActive && styles.avatarTextDisabled]}>
+                      {(item.name || 'C').charAt(0).toUpperCase()}
+                    </Text>
+                  </View>
 
-                  {/* AI Risk Score Badge */}
-                  {riskMap[item.id] && (
-                    <View style={[
-                      styles.riskBadge,
-                      riskMap[item.id].riskLevel === 'high' ? styles.riskHigh : riskMap[item.id].riskLevel === 'medium' ? styles.riskMed : styles.riskLow
-                    ]}>
-                      <Text style={[
-                        styles.riskBadgeText,
-                        riskMap[item.id].riskLevel === 'high' ? styles.riskHighText : riskMap[item.id].riskLevel === 'medium' ? styles.riskMedText : styles.riskLowText
-                      ]}>
-                        {riskMap[item.id].label}
+                  <View style={{ flex: 1, marginLeft: 12 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Text style={[styles.clientName, !isClientActive && styles.clientNameDisabled]}>
+                        {item.name}
                       </Text>
+                      <View style={[styles.statusTag, isClientActive ? styles.statusTagActive : styles.statusTagDisabled]}>
+                        <Text style={[styles.statusTagText, isClientActive ? styles.statusTagTextActive : styles.statusTagTextDisabled]}>
+                          {isClientActive ? 'ACTIVE' : 'DISABLED'}
+                        </Text>
+                      </View>
                     </View>
-                  )}
+
+                    {item.businessName ? (
+                      <Text style={styles.bizName}>{item.businessName}</Text>
+                    ) : null}
+                    <Text style={styles.phoneText}>+91 {item.phone}</Text>
+
+                    {/* AI Risk Score Badge */}
+                    {riskMap[item.id] && isClientActive && (
+                      <View style={[
+                        styles.riskBadge,
+                        riskMap[item.id].riskLevel === 'high' ? styles.riskHigh : riskMap[item.id].riskLevel === 'medium' ? styles.riskMed : styles.riskLow
+                      ]}>
+                        <Text style={[
+                          styles.riskBadgeText,
+                          riskMap[item.id].riskLevel === 'high' ? styles.riskHighText : riskMap[item.id].riskLevel === 'medium' ? styles.riskMedText : styles.riskLowText
+                        ]}>
+                          {riskMap[item.id].label}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+
+                  {/* Direct Action Dial / Chat / Toggle Buttons */}
+                  <View style={styles.quickActions}>
+                    <TouchableOpacity
+                      style={styles.callBtn}
+                      onPress={() => handleCall(item.phone)}
+                      activeOpacity={0.7}
+                    >
+                      <Phone size={15} color="#4f46e5" />
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={styles.waBtn}
+                      onPress={() => handleWhatsApp(item.phone, item.name)}
+                      activeOpacity={0.7}
+                    >
+                      <MessageSquare size={15} color="#059669" />
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[styles.statusMiniBtn, isClientActive ? styles.statusMiniBtnDisable : styles.statusMiniBtnEnable]}
+                      onPress={() => handleToggleStatus(item.id, isClientActive)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[styles.statusMiniText, isClientActive ? styles.statusMiniTextDisable : styles.statusMiniTextEnable]}>
+                        {isClientActive ? 'Disable' : 'Enable'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
 
-                {/* Direct Action Dial / Chat Buttons */}
-                <View style={styles.quickActions}>
-                  <TouchableOpacity
-                    style={styles.callBtn}
-                    onPress={() => handleCall(item.phone)}
-                    activeOpacity={0.7}
-                  >
-                    <Phone size={15} color="#4f46e5" />
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={styles.waBtn}
-                    onPress={() => handleWhatsApp(item.phone, item.name)}
-                    activeOpacity={0.7}
-                  >
-                    <MessageSquare size={15} color="#059669" />
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              {item.gstin ? (
-                <View style={styles.gstinBox}>
-                  <Text style={styles.gstinLabel}>GSTIN</Text>
-                  <Text style={styles.gstinText}>{item.gstin}</Text>
-                </View>
-              ) : null}
-            </TouchableOpacity>
-          )}
+                {item.gstin ? (
+                  <View style={styles.gstinBox}>
+                    <Text style={styles.gstinLabel}>GSTIN</Text>
+                    <Text style={styles.gstinText}>{item.gstin}</Text>
+                  </View>
+                ) : null}
+              </TouchableOpacity>
+            );
+          }}
 
           ListEmptyComponent={
             <View style={styles.emptyBox}>
@@ -326,6 +412,24 @@ export const ClientsScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
                   )}
                 </LinearGradient>
               </TouchableOpacity>
+
+              {editId ? (
+                <TouchableOpacity
+                  onPress={() => handleToggleStatus()}
+                  style={[
+                    styles.toggleStatusBtn,
+                    clientIsActive ? styles.toggleStatusBtnDisable : styles.toggleStatusBtnEnable
+                  ]}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[
+                    styles.toggleStatusText,
+                    clientIsActive ? styles.toggleStatusTextDisable : styles.toggleStatusTextEnable
+                  ]}>
+                    {clientIsActive ? 'Disable Client' : 'Enable Client'}
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
             </View>
           </View>
         </View>
@@ -510,23 +614,115 @@ const styles = StyleSheet.create({
   riskHighText: {
     color: '#dc2626',
   },
-  quickActions: {
+  filterTabs: {
     flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
     gap: 8,
   },
-
+  filterChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 20,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  filterChipActive: {
+    backgroundColor: '#4f46e5',
+    borderColor: '#4f46e5',
+  },
+  filterChipText: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: '#64748b',
+  },
+  filterChipTextActive: {
+    color: '#ffffff',
+  },
+  clientCardDisabled: {
+    backgroundColor: '#f8fafc',
+    borderColor: '#e2e8f0',
+    opacity: 0.88,
+  },
+  avatarWrapDisabled: {
+    backgroundColor: '#f1f5f9',
+  },
+  avatarTextDisabled: {
+    color: '#94a3b8',
+  },
+  clientNameDisabled: {
+    color: '#64748b',
+    textDecorationLine: 'line-through',
+  },
+  statusTag: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  statusTagActive: {
+    backgroundColor: '#ecfdf5',
+    borderColor: '#a7f3d0',
+  },
+  statusTagDisabled: {
+    backgroundColor: '#fffbeb',
+    borderColor: '#fde68a',
+  },
+  statusTagText: {
+    fontSize: 8.5,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
+  statusTagTextActive: {
+    color: '#047857',
+  },
+  statusTagTextDisabled: {
+    color: '#b45309',
+  },
+  statusMiniBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  statusMiniBtnDisable: {
+    backgroundColor: '#fffbeb',
+    borderColor: '#fde68a',
+  },
+  statusMiniBtnEnable: {
+    backgroundColor: '#ecfdf5',
+    borderColor: '#a7f3d0',
+  },
+  statusMiniText: {
+    fontSize: 10.5,
+    fontWeight: '800',
+  },
+  statusMiniTextDisable: {
+    color: '#b45309',
+  },
+  statusMiniTextEnable: {
+    color: '#047857',
+  },
+  quickActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   callBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
+    width: 34,
+    height: 34,
+    borderRadius: 10,
     backgroundColor: '#e0e7ff',
     alignItems: 'center',
     justifyContent: 'center',
   },
   waBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
+    width: 34,
+    height: 34,
+    borderRadius: 10,
     backgroundColor: '#ecfdf5',
     alignItems: 'center',
     justifyContent: 'center',
@@ -643,6 +839,32 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '800',
     color: '#ffffff',
+  },
+  toggleStatusBtn: {
+    paddingVertical: 12,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 10,
+    borderWidth: 1,
+  },
+  toggleStatusBtnDisable: {
+    backgroundColor: '#fffbeb',
+    borderColor: '#fde68a',
+  },
+  toggleStatusBtnEnable: {
+    backgroundColor: '#ecfdf5',
+    borderColor: '#a7f3d0',
+  },
+  toggleStatusText: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  toggleStatusTextDisable: {
+    color: '#b45309',
+  },
+  toggleStatusTextEnable: {
+    color: '#047857',
   },
 });
 

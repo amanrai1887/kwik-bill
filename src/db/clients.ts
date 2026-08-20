@@ -1,6 +1,6 @@
 import { db } from './index.ts';
-import { clients } from './schema.ts';
-import { eq, and, desc } from 'drizzle-orm';
+import { clients, invoices, payments, reminderLogs, recurringProfiles } from './schema.ts';
+import { eq, and, desc, inArray } from 'drizzle-orm';
 
 export async function getClientsByUserId(userId: number) {
   try {
@@ -21,6 +21,7 @@ export async function createClient(userId: number, clientData: {
   industryType?: string;
   paymentTermDays?: number;
   notes?: string;
+  isActive?: boolean;
 }) {
   try {
     const inserted = await db.insert(clients).values({
@@ -34,6 +35,7 @@ export async function createClient(userId: number, clientData: {
       industryType: clientData.industryType || 'general',
       paymentTermDays: clientData.paymentTermDays || 7,
       notes: clientData.notes || '',
+      isActive: clientData.isActive !== undefined ? clientData.isActive : true,
     }).returning();
     return inserted[0];
   } catch (error) {
@@ -55,11 +57,75 @@ export async function updateClient(userId: number, clientId: number, clientData:
   }
 }
 
+export async function toggleClientActive(userId: number, clientId: number, isActive?: boolean) {
+  try {
+    if (typeof isActive === 'boolean') {
+      const updated = await db.update(clients)
+        .set({ isActive })
+        .where(and(eq(clients.id, clientId), eq(clients.userId, userId)))
+        .returning();
+      return updated[0];
+    } else {
+      const existing = await db.select().from(clients).where(and(eq(clients.id, clientId), eq(clients.userId, userId)));
+      if (!existing || existing.length === 0) {
+        throw new Error("Client not found");
+      }
+      const newStatus = !existing[0].isActive;
+      const updated = await db.update(clients)
+        .set({ isActive: newStatus })
+        .where(and(eq(clients.id, clientId), eq(clients.userId, userId)))
+        .returning();
+      return updated[0];
+    }
+  } catch (error: any) {
+    console.error("Failed to toggle client status:", error);
+    throw new Error(error?.message || "Failed to toggle client status.", { cause: error });
+  }
+}
+
 export async function deleteClient(userId: number, clientId: number) {
   try {
-    return await db.delete(clients).where(and(eq(clients.id, clientId), eq(clients.userId, userId))).returning();
-  } catch (error) {
+    // 1. Get all invoice IDs belonging to this client
+    const clientInvoices = await db
+      .select({ id: invoices.id })
+      .from(invoices)
+      .where(and(eq(invoices.clientId, clientId), eq(invoices.userId, userId)));
+
+    const invoiceIds = clientInvoices.map((inv) => inv.id);
+
+    // 2. Delete payments for these invoices if any exist
+    if (invoiceIds.length > 0) {
+      await db
+        .delete(payments)
+        .where(and(eq(payments.userId, userId), inArray(payments.invoiceId, invoiceIds)));
+    }
+
+    // 3. Delete reminder logs associated with this client
+    await db
+      .delete(reminderLogs)
+      .where(and(eq(reminderLogs.clientId, clientId), eq(reminderLogs.userId, userId)));
+
+    // 4. Delete recurring profiles for this client
+    await db
+      .delete(recurringProfiles)
+      .where(and(eq(recurringProfiles.clientId, clientId), eq(recurringProfiles.userId, userId)));
+
+    // 5. Delete invoices for this client
+    if (invoiceIds.length > 0) {
+      await db
+        .delete(invoices)
+        .where(and(eq(invoices.clientId, clientId), eq(invoices.userId, userId)));
+    }
+
+    // 6. Delete the client
+    const deleted = await db
+      .delete(clients)
+      .where(and(eq(clients.id, clientId), eq(clients.userId, userId)))
+      .returning();
+
+    return deleted[0];
+  } catch (error: any) {
     console.error("Failed to delete client:", error);
-    throw new Error("Failed to delete client.", { cause: error });
+    throw new Error(error?.message || "Failed to delete client.", { cause: error });
   }
 }

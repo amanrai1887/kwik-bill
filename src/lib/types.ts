@@ -43,6 +43,7 @@ export interface Client {
   industryType: IndustryType;
   paymentTermDays: number;
   notes?: string;
+  isActive?: boolean;
   createdAt?: string;
 }
 

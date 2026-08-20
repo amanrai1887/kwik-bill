@@ -29,6 +29,7 @@ import {
   createClient,
   updateClient,
   deleteClient,
+  toggleClientStatus,
   fetchInvoices,
   createInvoice,
   deleteInvoice,
@@ -288,11 +289,27 @@ function AppContent() {
     setClientToEdit(null);
   };
 
+  // Handler: Toggle Client Active/Disabled Status
+  const handleToggleClientStatus = async (clientId: number, currentStatus: boolean) => {
+    const actionText = currentStatus ? 'disable' : 'enable';
+    if (!confirm(`Are you sure you want to ${actionText} this client?`)) return;
+    try {
+      await toggleClientStatus(clientId, !currentStatus);
+      await loadAllData();
+    } catch (err: any) {
+      alert(err.message || `Failed to ${actionText} client`);
+    }
+  };
+
   // Handler: Delete Client
   const handleDeleteClient = async (clientId: number) => {
-    if (!confirm('Are you sure you want to delete this client?')) return;
-    await deleteClient(clientId);
-    await loadAllData();
+    if (!confirm('Are you sure you want to permanently delete this client and their associated records? (Tip: You can use "Disable" instead to preserve history)')) return;
+    try {
+      await deleteClient(clientId);
+      await loadAllData();
+    } catch (err: any) {
+      alert(err.message || 'Failed to delete client');
+    }
   };
 
   // Handler: Update Business Profile
@@ -467,6 +484,7 @@ function AppContent() {
                     setClientToEdit(client);
                     setIsClientModalOpen(true);
                   }}
+                  onToggleClientStatus={handleToggleClientStatus}
                   onDeleteClient={handleDeleteClient}
                   onCreateInvoiceForClient={(client) => {
                     setIsCreateInvoiceOpen(true);

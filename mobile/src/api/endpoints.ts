@@ -70,6 +70,12 @@ export const api = {
   deleteClient: async (id: number) => {
     return await apiClient(`/clients/${id}`, { method: 'DELETE' });
   },
+  toggleClientStatus: async (id: number, isActive?: boolean) => {
+    return await apiClient<{ success: boolean; client: Client }>(`/clients/${id}/toggle-status`, {
+      method: 'PATCH',
+      body: { isActive },
+    });
+  },
 
   // Payments
   recordPayment: async (data: {

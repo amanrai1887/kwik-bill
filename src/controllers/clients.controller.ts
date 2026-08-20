@@ -4,7 +4,8 @@ import {
   getClientsByUserId, 
   createClient, 
   updateClient, 
-  deleteClient 
+  deleteClient,
+  toggleClientActive
 } from "../db/clients.ts";
 
 export async function getClients(req: AuthRequest, res: Response) {
@@ -33,6 +34,9 @@ export async function putClient(req: AuthRequest, res: Response) {
   try {
     const userId = req.dbUser.id;
     const clientId = parseInt(req.params.id);
+    if (isNaN(clientId)) {
+      return res.status(400).json({ error: "Invalid client ID" });
+    }
     const updated = await updateClient(userId, clientId, req.body);
     res.json({ success: true, client: updated });
   } catch (error: any) {
@@ -41,10 +45,29 @@ export async function putClient(req: AuthRequest, res: Response) {
   }
 }
 
+export async function toggleClient(req: AuthRequest, res: Response) {
+  try {
+    const userId = req.dbUser.id;
+    const clientId = parseInt(req.params.id);
+    if (isNaN(clientId)) {
+      return res.status(400).json({ error: "Invalid client ID" });
+    }
+    const { isActive } = req.body || {};
+    const updated = await toggleClientActive(userId, clientId, typeof isActive === 'boolean' ? isActive : undefined);
+    res.json({ success: true, client: updated });
+  } catch (error: any) {
+    console.error("Failed to toggle client:", error);
+    res.status(500).json({ error: error.message || "Failed to toggle client status" });
+  }
+}
+
 export async function removeClient(req: AuthRequest, res: Response) {
   try {
     const userId = req.dbUser.id;
     const clientId = parseInt(req.params.id);
+    if (isNaN(clientId)) {
+      return res.status(400).json({ error: "Invalid client ID" });
+    }
     await deleteClient(userId, clientId);
     res.json({ success: true });
   } catch (error: any) {
@@ -52,3 +75,4 @@ export async function removeClient(req: AuthRequest, res: Response) {
     res.status(500).json({ error: error.message || "Failed to delete client" });
   }
 }
+

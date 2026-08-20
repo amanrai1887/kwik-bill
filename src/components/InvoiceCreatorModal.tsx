@@ -296,7 +296,7 @@ export const InvoiceCreatorModal: React.FC<InvoiceCreatorModalProps> = ({
                 >
                   {clients.map((c) => (
                     <option key={c.id} value={c.id}>
-                      {c.name} {c.companyName ? `(${c.companyName})` : ''} - {c.phone}
+                      {c.name} {c.companyName ? `(${c.companyName})` : ''} - {c.phone}{c.isActive === false ? ' (Disabled)' : ''}
                     </option>
                   ))}
                 </select>

@@ -57,7 +57,7 @@ export async function getFreshAuthToken(): Promise<string | null> {
 export async function apiClient<T = any>(
   endpoint: string,
   options: {
-    method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
+    method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
     body?: any;
   } = {}
 ): Promise<T> {
@@ -99,10 +99,26 @@ export async function apiClient<T = any>(
     }
   }
 
-  const data = await response.json();
+  let data: any = {};
+  const contentType = response.headers.get('content-type') || '';
+  if (contentType.includes('application/json')) {
+    try {
+      data = await response.json();
+    } catch {
+      data = {};
+    }
+  } else {
+    try {
+      const text = await response.text();
+      data = { error: text };
+    } catch {
+      data = {};
+    }
+  }
 
   if (!response.ok) {
-    throw new Error(data.error || `HTTP ${response.status}: Failed request`);
+    const errorMsg = data.error || data.message || `HTTP ${response.status}: Failed request`;
+    throw new Error(errorMsg);
   }
 
   return data;

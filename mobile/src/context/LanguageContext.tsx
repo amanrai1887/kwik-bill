@@ -10,7 +10,7 @@ interface LanguageContextType {
 
 const LanguageContext = createContext<LanguageContextType>({
   language: 'en',
-  setLanguage: async () => {},
+  setLanguage: async () => { },
   t: (key: TranslationKeys, fallback?: string) => fallback || key,
 });
 

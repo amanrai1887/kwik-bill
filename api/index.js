@@ -70,7 +70,7 @@ var init_schema = __esm({
     });
     clients = pgTable("clients", {
       id: serial("id").primaryKey(),
-      userId: integer("user_id").references(() => users.id).notNull(),
+      userId: integer("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
       name: text("name").notNull(),
       phone: text("phone").notNull(),
       // WhatsApp Phone number
@@ -82,12 +82,13 @@ var init_schema = __esm({
       // transport, agency, freelancer, consultant
       paymentTermDays: integer("payment_term_days").default(7),
       notes: text("notes").default(""),
+      isActive: boolean("is_active").default(true).notNull(),
       createdAt: timestamp("created_at").defaultNow()
     });
     invoices = pgTable("invoices", {
       id: serial("id").primaryKey(),
-      userId: integer("user_id").references(() => users.id).notNull(),
-      clientId: integer("client_id").references(() => clients.id).notNull(),
+      userId: integer("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+      clientId: integer("client_id").references(() => clients.id, { onDelete: "cascade" }).notNull(),
       invoiceNumber: text("invoice_number").notNull(),
       issueDate: text("issue_date").notNull(),
       // YYYY-MM-DD
@@ -129,8 +130,8 @@ var init_schema = __esm({
     });
     payments = pgTable("payments", {
       id: serial("id").primaryKey(),
-      userId: integer("user_id").references(() => users.id).notNull(),
-      invoiceId: integer("invoice_id").references(() => invoices.id).notNull(),
+      userId: integer("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+      invoiceId: integer("invoice_id").references(() => invoices.id, { onDelete: "cascade" }).notNull(),
       amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
       paymentDate: text("payment_date").notNull(),
       // YYYY-MM-DD
@@ -142,9 +143,9 @@ var init_schema = __esm({
     });
     reminderLogs = pgTable("reminder_logs", {
       id: serial("id").primaryKey(),
-      userId: integer("user_id").references(() => users.id).notNull(),
-      invoiceId: integer("invoice_id").references(() => invoices.id).notNull(),
-      clientId: integer("client_id").references(() => clients.id).notNull(),
+      userId: integer("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+      invoiceId: integer("invoice_id").references(() => invoices.id, { onDelete: "cascade" }).notNull(),
+      clientId: integer("client_id").references(() => clients.id, { onDelete: "cascade" }).notNull(),
       channel: text("channel").default("whatsapp").notNull(),
       // whatsapp | sms | email
       templateType: text("template_type").default("standard").notNull(),
@@ -157,7 +158,7 @@ var init_schema = __esm({
     });
     planRequests = pgTable("plan_requests", {
       id: serial("id").primaryKey(),
-      userId: integer("user_id").references(() => users.id).notNull(),
+      userId: integer("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
       businessName: text("business_name").notNull(),
       contactPerson: text("contact_person").notNull(),
       email: text("email").notNull(),
@@ -172,8 +173,8 @@ var init_schema = __esm({
     });
     recurringProfiles = pgTable("recurring_profiles", {
       id: serial("id").primaryKey(),
-      userId: integer("user_id").references(() => users.id).notNull(),
-      clientId: integer("client_id").references(() => clients.id).notNull(),
+      userId: integer("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+      clientId: integer("client_id").references(() => clients.id, { onDelete: "cascade" }).notNull(),
       title: text("title").default("Recurring Retainer Billing").notNull(),
       frequency: text("frequency").default("monthly").notNull(),
       // 'weekly' | 'monthly' | 'quarterly' | 'yearly'
@@ -829,7 +830,7 @@ import { Router as Router2 } from "express";
 // src/db/clients.ts
 init_db();
 init_schema();
-import { eq as eq4, and, desc as desc2 } from "drizzle-orm";
+import { eq as eq4, and, desc as desc2, inArray } from "drizzle-orm";
 async function getClientsByUserId(userId) {
   try {
     return await db.select().from(clients).where(eq4(clients.userId, userId)).orderBy(desc2(clients.createdAt));
@@ -850,7 +851,8 @@ async function createClient(userId, clientData) {
       gstin: clientData.gstin || "",
       industryType: clientData.industryType || "general",
       paymentTermDays: clientData.paymentTermDays || 7,
-      notes: clientData.notes || ""
+      notes: clientData.notes || "",
+      isActive: clientData.isActive !== void 0 ? clientData.isActive : true
     }).returning();
     return inserted[0];
   } catch (error) {
@@ -867,12 +869,42 @@ async function updateClient(userId, clientId, clientData) {
     throw new Error("Failed to update client.", { cause: error });
   }
 }
+async function toggleClientActive(userId, clientId, isActive) {
+  try {
+    if (typeof isActive === "boolean") {
+      const updated = await db.update(clients).set({ isActive }).where(and(eq4(clients.id, clientId), eq4(clients.userId, userId))).returning();
+      return updated[0];
+    } else {
+      const existing = await db.select().from(clients).where(and(eq4(clients.id, clientId), eq4(clients.userId, userId)));
+      if (!existing || existing.length === 0) {
+        throw new Error("Client not found");
+      }
+      const newStatus = !existing[0].isActive;
+      const updated = await db.update(clients).set({ isActive: newStatus }).where(and(eq4(clients.id, clientId), eq4(clients.userId, userId))).returning();
+      return updated[0];
+    }
+  } catch (error) {
+    console.error("Failed to toggle client status:", error);
+    throw new Error(error?.message || "Failed to toggle client status.", { cause: error });
+  }
+}
 async function deleteClient(userId, clientId) {
   try {
-    return await db.delete(clients).where(and(eq4(clients.id, clientId), eq4(clients.userId, userId))).returning();
+    const clientInvoices = await db.select({ id: invoices.id }).from(invoices).where(and(eq4(invoices.clientId, clientId), eq4(invoices.userId, userId)));
+    const invoiceIds = clientInvoices.map((inv) => inv.id);
+    if (invoiceIds.length > 0) {
+      await db.delete(payments).where(and(eq4(payments.userId, userId), inArray(payments.invoiceId, invoiceIds)));
+    }
+    await db.delete(reminderLogs).where(and(eq4(reminderLogs.clientId, clientId), eq4(reminderLogs.userId, userId)));
+    await db.delete(recurringProfiles).where(and(eq4(recurringProfiles.clientId, clientId), eq4(recurringProfiles.userId, userId)));
+    if (invoiceIds.length > 0) {
+      await db.delete(invoices).where(and(eq4(invoices.clientId, clientId), eq4(invoices.userId, userId)));
+    }
+    const deleted = await db.delete(clients).where(and(eq4(clients.id, clientId), eq4(clients.userId, userId))).returning();
+    return deleted[0];
   } catch (error) {
     console.error("Failed to delete client:", error);
-    throw new Error("Failed to delete client.", { cause: error });
+    throw new Error(error?.message || "Failed to delete client.", { cause: error });
   }
 }
 
@@ -901,6 +933,9 @@ async function putClient(req, res) {
   try {
     const userId = req.dbUser.id;
     const clientId = parseInt(req.params.id);
+    if (isNaN(clientId)) {
+      return res.status(400).json({ error: "Invalid client ID" });
+    }
     const updated = await updateClient(userId, clientId, req.body);
     res.json({ success: true, client: updated });
   } catch (error) {
@@ -908,10 +943,28 @@ async function putClient(req, res) {
     res.status(500).json({ error: error.message || "Failed to update client" });
   }
 }
+async function toggleClient(req, res) {
+  try {
+    const userId = req.dbUser.id;
+    const clientId = parseInt(req.params.id);
+    if (isNaN(clientId)) {
+      return res.status(400).json({ error: "Invalid client ID" });
+    }
+    const { isActive } = req.body || {};
+    const updated = await toggleClientActive(userId, clientId, typeof isActive === "boolean" ? isActive : void 0);
+    res.json({ success: true, client: updated });
+  } catch (error) {
+    console.error("Failed to toggle client:", error);
+    res.status(500).json({ error: error.message || "Failed to toggle client status" });
+  }
+}
 async function removeClient(req, res) {
   try {
     const userId = req.dbUser.id;
     const clientId = parseInt(req.params.id);
+    if (isNaN(clientId)) {
+      return res.status(400).json({ error: "Invalid client ID" });
+    }
     await deleteClient(userId, clientId);
     res.json({ success: true });
   } catch (error) {
@@ -926,6 +979,8 @@ router2.use(requireAuth);
 router2.get("/", getClients);
 router2.post("/", postClient);
 router2.put("/:id", putClient);
+router2.patch("/:id/toggle-status", toggleClient);
+router2.post("/:id/toggle-status", toggleClient);
 router2.delete("/:id", removeClient);
 var clients_routes_default = router2;
 
@@ -2004,8 +2059,10 @@ async function initializeDatabase() {
         industry_type TEXT DEFAULT 'general',
         payment_term_days INTEGER DEFAULT 7,
         notes TEXT DEFAULT '',
+        is_active BOOLEAN NOT NULL DEFAULT true,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
+      ALTER TABLE clients ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true;
     `);
     await pool2.query(`
       CREATE TABLE IF NOT EXISTS invoices (

@@ -44,6 +44,7 @@ export interface Client {
   totalInvoiced?: number;
   totalPaid?: number;
   totalPending?: number;
+  isActive?: boolean;
   createdAt: string;
 }
 
@@ -84,6 +85,7 @@ export interface Invoice {
   taxType?: 'intra_state' | 'inter_state';
   shareToken?: string;
   isCancelled?: boolean;
+  cancelReason?: string;
   upiId?: string;
   qrCodeUrl?: string;
   notes?: string;

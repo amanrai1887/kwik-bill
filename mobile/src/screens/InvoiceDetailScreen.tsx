@@ -21,6 +21,8 @@ import {
   ArrowLeft,
   Download,
   Printer,
+  AlertCircle,
+  XCircle,
 } from 'lucide-react-native';
 
 import { api } from '../api/endpoints.ts';
@@ -66,22 +68,27 @@ export const InvoiceDetailScreen: React.FC<{ route: any; navigation: any }> = ({
     loadInvoice();
   }, [loadInvoice]);
 
-  const handleDelete = async () => {
-    Alert.alert('Delete Invoice', 'Are you sure you want to delete this invoice?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await api.deleteInvoice(invoiceId);
-            navigation.goBack();
-          } catch (err: any) {
-            Alert.alert('Error', err.message || 'Failed to delete');
-          }
+  const handleCancelInvoice = async () => {
+    Alert.alert(
+      'Cancel Invoice (GST Void)',
+      'Are you sure you want to cancel this invoice? Under GST Rule 46, cancelling marks the invoice void in your sales register while keeping statutory audit integrity.',
+      [
+        { text: 'Keep Active', style: 'cancel' },
+        {
+          text: 'Yes, Cancel Invoice',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await api.deleteInvoice(invoiceId);
+              Alert.alert('Invoice Cancelled', 'The invoice has been successfully marked as void/cancelled.');
+              loadInvoice();
+            } catch (err: any) {
+              Alert.alert('Error', err.message || 'Failed to cancel invoice');
+            }
+          },
         },
-      },
-    ]);
+      ]
+    );
   };
 
   if (isLoading || !invoice) {
@@ -92,7 +99,8 @@ export const InvoiceDetailScreen: React.FC<{ route: any; navigation: any }> = ({
     );
   }
 
-  const isPaid = invoice.status === 'paid';
+  const isCancelled = invoice.status === 'cancelled' || invoice.isCancelled;
+  const isPaid = invoice.status === 'paid' && !isCancelled;
   const balance = parseFloat(invoice.balanceDue || invoice.totalAmount);
 
   return (
@@ -100,7 +108,7 @@ export const InvoiceDetailScreen: React.FC<{ route: any; navigation: any }> = ({
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Full Bleed Dark Hero Header */}
         <LinearGradient
-          colors={['#0f172a', '#1e1b4b', '#312e81']}
+          colors={isCancelled ? ['#1e293b', '#334155', '#475569'] : ['#0f172a', '#1e1b4b', '#312e81']}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.heroHeader}
@@ -116,14 +124,18 @@ export const InvoiceDetailScreen: React.FC<{ route: any; navigation: any }> = ({
               </TouchableOpacity>
               <View>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <Text style={styles.heroSubText}>{t('tax_invoice_details', 'TAX INVOICE DETAILS')}</Text>
+                  <Text style={styles.heroSubText}>
+                    {isCancelled ? 'CANCELLED / VOIDED INVOICE' : t('tax_invoice_details', 'TAX INVOICE DETAILS')}
+                  </Text>
                   <View style={{ backgroundColor: 'rgba(255,255,255,0.15)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
                     <Text style={{ fontSize: 9, color: '#f8fafc', fontWeight: '800', textTransform: 'uppercase' }}>
                       {user?.invoiceTemplate || 'modern'}
                     </Text>
                   </View>
                 </View>
-                <Text style={styles.heroTitle}>#{invoice.invoiceNumber}</Text>
+                <Text style={[styles.heroTitle, isCancelled && styles.heroTitleCancelled]}>
+                  #{invoice.invoiceNumber}
+                </Text>
               </View>
             </View>
             
@@ -144,9 +156,27 @@ export const InvoiceDetailScreen: React.FC<{ route: any; navigation: any }> = ({
                 <Text style={styles.pdfDownloadText}>{t('pdf', 'PDF')}</Text>
               </TouchableOpacity>
 
-              <View style={[styles.statusBadge, isPaid ? styles.statusPaid : styles.statusPending]}>
-                <Text style={[styles.statusText, isPaid ? styles.statusTextPaid : styles.statusTextPending]}>
-                  {isPaid ? t('paid', 'PAID') : t('pending', 'PENDING')}
+              <View
+                style={[
+                  styles.statusBadge,
+                  isCancelled
+                    ? styles.statusCancelled
+                    : isPaid
+                    ? styles.statusPaid
+                    : styles.statusPending,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.statusText,
+                    isCancelled
+                      ? styles.statusTextCancelled
+                      : isPaid
+                      ? styles.statusTextPaid
+                      : styles.statusTextPending,
+                  ]}
+                >
+                  {isCancelled ? 'CANCELLED' : isPaid ? t('paid', 'PAID') : t('pending', 'PENDING')}
                 </Text>
               </View>
             </View>
@@ -155,11 +185,11 @@ export const InvoiceDetailScreen: React.FC<{ route: any; navigation: any }> = ({
           <View style={styles.heroAmountBox}>
             <View>
               <Text style={styles.heroAmountLabel}>{t('total_invoice_amount', 'Total Invoice Amount')}</Text>
-              <Text style={styles.heroAmountVal}>
+              <Text style={[styles.heroAmountVal, isCancelled && styles.heroAmountValCancelled]}>
                 ₹{parseFloat(invoice.totalAmount).toLocaleString('en-IN')}
               </Text>
             </View>
-            {!isPaid && (
+            {!isPaid && !isCancelled && (
               <View style={styles.heroDueBox}>
                 <Text style={styles.heroDueLabel}>{t('balance_due', 'Balance Due')}</Text>
                 <Text style={styles.heroDueVal}>₹{balance.toLocaleString('en-IN')}</Text>
@@ -167,6 +197,19 @@ export const InvoiceDetailScreen: React.FC<{ route: any; navigation: any }> = ({
             )}
           </View>
         </LinearGradient>
+
+        {/* Cancelled Notice Banner */}
+        {isCancelled && (
+          <View style={styles.cancelledNoticeCard}>
+            <AlertCircle size={20} color="#dc2626" />
+            <View style={{ flex: 1, marginLeft: 10 }}>
+              <Text style={styles.cancelledNoticeTitle}>Invoice Voided (Rule 46)</Text>
+              <Text style={styles.cancelledNoticeSub}>
+                {invoice.cancelReason || 'This invoice has been cancelled for GST Table 13 compliance and cannot accept payments.'}
+              </Text>
+            </View>
+          </View>
+        )}
 
         {/* Client Details */}
         <View style={styles.card}>
@@ -356,33 +399,45 @@ export const InvoiceDetailScreen: React.FC<{ route: any; navigation: any }> = ({
           </Text>
         </View>
 
-        {/* Delete Invoice */}
-        <TouchableOpacity style={styles.deleteBtn} onPress={handleDelete}>
-          <Trash2 size={16} color="#e11d48" />
-          <Text style={styles.deleteText}>{t('delete_invoice', 'Delete Invoice')}</Text>
-        </TouchableOpacity>
+        {/* Cancel Invoice Action */}
+        {!isCancelled ? (
+          <TouchableOpacity style={styles.cancelInvoiceBtn} onPress={handleCancelInvoice} activeOpacity={0.8}>
+            <XCircle size={16} color="#e11d48" />
+            <Text style={styles.cancelInvoiceText}>Cancel Invoice (GST Void)</Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.alreadyCancelledBox}>
+            <Text style={styles.alreadyCancelledText}>Invoice status is permanently Void / Cancelled</Text>
+          </View>
+        )}
       </ScrollView>
 
       {/* Floating Action Bar */}
-      <View style={styles.footerActions}>
-        <TouchableOpacity
-          style={styles.whatsAppBtn}
-          onPress={() => setShowWhatsApp(true)}
-        >
-          <Send size={16} color="#ffffff" />
-          <Text style={styles.whatsAppText}>{t('whatsapp_reminder', 'WhatsApp Reminder')}</Text>
-        </TouchableOpacity>
-
-        {!isPaid && (
+      {!isCancelled ? (
+        <View style={styles.footerActions}>
           <TouchableOpacity
-            style={styles.settleBtn}
-            onPress={() => setShowPayment(true)}
+            style={styles.whatsAppBtn}
+            onPress={() => setShowWhatsApp(true)}
           >
-            <CheckCircle size={16} color="#ffffff" />
-            <Text style={styles.settleText}>{t('record_settlement', 'Record Settlement')}</Text>
+            <Send size={16} color="#ffffff" />
+            <Text style={styles.whatsAppText}>{t('whatsapp_reminder', 'WhatsApp Reminder')}</Text>
           </TouchableOpacity>
-        )}
-      </View>
+
+          {!isPaid && (
+            <TouchableOpacity
+              style={styles.settleBtn}
+              onPress={() => setShowPayment(true)}
+            >
+              <CheckCircle size={16} color="#ffffff" />
+              <Text style={styles.settleText}>{t('record_settlement', 'Record Settlement')}</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      ) : (
+        <View style={styles.cancelledFooterBar}>
+          <Text style={styles.cancelledFooterText}>VOIDED INVOICE • PRESERVED FOR GST AUDIT</Text>
+        </View>
+      )}
 
 
       {/* WhatsApp Modal */}
@@ -684,10 +739,91 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#ffe4e6',
   },
-  deleteText: {
-    fontSize: 12,
-    fontWeight: '700',
+  heroTitleCancelled: {
+    color: '#cbd5e1',
+    textDecorationLine: 'line-through',
+  },
+  heroAmountValCancelled: {
+    color: '#cbd5e1',
+    textDecorationLine: 'line-through',
+  },
+  statusCancelled: {
+    backgroundColor: 'rgba(239, 68, 68, 0.25)',
+  },
+  statusTextCancelled: {
+    color: '#f87171',
+  },
+  cancelledNoticeCard: {
+    backgroundColor: '#fef2f2',
+    borderRadius: 16,
+    marginHorizontal: 16,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#fecaca',
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  cancelledNoticeTitle: {
+    fontSize: 13,
+    fontWeight: '900',
+    color: '#dc2626',
+  },
+  cancelledNoticeSub: {
+    fontSize: 11,
+    color: '#991b1b',
+    marginTop: 2,
+    lineHeight: 15,
+  },
+  cancelInvoiceBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    padding: 14,
+    borderRadius: 14,
+    backgroundColor: '#fff1f2',
+    borderWidth: 1,
+    borderColor: '#ffe4e6',
+    marginHorizontal: 16,
+    marginBottom: 20,
+  },
+  cancelInvoiceText: {
+    fontSize: 12.5,
+    fontWeight: '800',
     color: '#e11d48',
+  },
+  alreadyCancelledBox: {
+    padding: 14,
+    borderRadius: 14,
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    marginHorizontal: 16,
+    marginBottom: 20,
+    alignItems: 'center',
+  },
+  alreadyCancelledText: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: '#94a3b8',
+  },
+  cancelledFooterBar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#fef2f2',
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#fecaca',
+    alignItems: 'center',
+  },
+  cancelledFooterText: {
+    fontSize: 11.5,
+    fontWeight: '900',
+    color: '#dc2626',
+    letterSpacing: 0.8,
   },
   footerActions: {
     position: 'absolute',

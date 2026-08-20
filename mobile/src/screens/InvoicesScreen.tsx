@@ -60,13 +60,19 @@ export const InvoicesScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
       (inv.client?.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (inv.client?.businessName || '').toLowerCase().includes(searchTerm.toLowerCase());
 
+    const isCancelled = inv.status === 'cancelled' || inv.isCancelled;
     const matchesStatus =
       statusFilter === 'all' ||
-      (statusFilter === 'paid' && inv.status === 'paid') ||
-      (statusFilter === 'pending' && inv.status !== 'paid');
+      (statusFilter === 'paid' && inv.status === 'paid' && !isCancelled) ||
+      (statusFilter === 'pending' && inv.status !== 'paid' && !isCancelled) ||
+      (statusFilter === 'cancelled' && isCancelled);
 
     return matchesSearch && matchesStatus;
   });
+
+  const pendingCount = invoices.filter((i) => i.status !== 'paid' && i.status !== 'cancelled' && !i.isCancelled).length;
+  const paidCount = invoices.filter((i) => i.status === 'paid' && !i.isCancelled).length;
+  const cancelledCount = invoices.filter((i) => i.status === 'cancelled' || i.isCancelled).length;
 
   return (
     <View style={styles.container}>
@@ -109,8 +115,9 @@ export const InvoicesScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
       <View style={styles.filterTabs}>
         {[
           { id: 'all', label: `${t('all', 'All')} (${invoices.length})` },
-          { id: 'pending', label: `${t('pending', 'Pending')} (${invoices.filter((i) => i.status !== 'paid').length})` },
-          { id: 'paid', label: `${t('paid', 'Paid')} (${invoices.filter((i) => i.status === 'paid').length})` },
+          { id: 'pending', label: `${t('pending', 'Pending')} (${pendingCount})` },
+          { id: 'paid', label: `${t('paid', 'Paid')} (${paidCount})` },
+          { id: 'cancelled', label: `Cancelled (${cancelledCount})` },
         ].map((f) => (
           <TouchableOpacity
             key={f.id}
@@ -123,8 +130,6 @@ export const InvoicesScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
           </TouchableOpacity>
         ))}
       </View>
-
-
 
       {/* Invoices List */}
       {isLoading && !refreshing ? (
@@ -139,27 +144,48 @@ export const InvoicesScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
           renderItem={({ item }) => {
-            const isPaid = item.status === 'paid';
+            const isCancelled = item.status === 'cancelled' || item.isCancelled;
+            const isPaid = item.status === 'paid' && !isCancelled;
             const total = parseFloat(item.totalAmount);
             const paid = parseFloat(item.paidAmount || '0');
             const balance = Math.max(0, total - paid);
 
             return (
               <TouchableOpacity
-                style={styles.invoiceCard}
+                style={[styles.invoiceCard, isCancelled && styles.invoiceCardCancelled]}
                 onPress={() => navigation.navigate('InvoiceDetail', { invoiceId: item.id })}
                 activeOpacity={0.75}
               >
                 <View style={styles.cardHeader}>
                   <View style={styles.headerLeft}>
-                    <Text style={styles.invoiceNum}>#{item.invoiceNumber}</Text>
+                    <Text style={[styles.invoiceNum, isCancelled && styles.invoiceNumCancelled]}>
+                      #{item.invoiceNumber}
+                    </Text>
                     <Text style={styles.clientName} numberOfLines={1}>
                       {item.client?.name || 'Customer'}
                     </Text>
                   </View>
-                  <View style={[styles.statusBadge, isPaid ? styles.statusPaid : styles.statusPending]}>
-                    <Text style={[styles.statusText, isPaid ? styles.statusTextPaid : styles.statusTextPending]}>
-                      {isPaid ? t('paid', 'PAID') : t('pending', 'PENDING')}
+                  <View
+                    style={[
+                      styles.statusBadge,
+                      isCancelled
+                        ? styles.statusCancelled
+                        : isPaid
+                        ? styles.statusPaid
+                        : styles.statusPending,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.statusText,
+                        isCancelled
+                          ? styles.statusTextCancelled
+                          : isPaid
+                          ? styles.statusTextPaid
+                          : styles.statusTextPending,
+                      ]}
+                    >
+                      {isCancelled ? 'CANCELLED' : isPaid ? t('paid', 'PAID') : t('pending', 'PENDING')}
                     </Text>
                   </View>
                 </View>
@@ -169,17 +195,19 @@ export const InvoicesScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
                 <View style={styles.cardFooter}>
                   <View>
                     <Text style={styles.dateText}>{t('due', 'Due')}: {item.dueDate || t('immediate', 'Immediate')}</Text>
-                    <Text style={styles.amountText}>
+                    <Text style={[styles.amountText, isCancelled && styles.amountTextCancelled]}>
                       ₹{total.toLocaleString('en-IN')}
                     </Text>
-                    {isPaid ? (
+                    {isCancelled ? (
+                      <Text style={styles.cancelledSubText}>Voided for GST Audit</Text>
+                    ) : isPaid ? (
                       <Text style={styles.paidSubText}>{t('settled_100', 'Settled 100%')}</Text>
                     ) : balance < total && balance > 0 ? (
                       <Text style={styles.balanceSubText}>{t('bal', 'Bal')}: ₹{balance.toLocaleString('en-IN')}</Text>
                     ) : null}
                   </View>
 
-                  {!isPaid && (
+                  {!isPaid && !isCancelled && (
                     <View style={styles.actionButtons}>
                       <TouchableOpacity
                         style={styles.whatsAppActionBtn}
@@ -196,6 +224,12 @@ export const InvoicesScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
                         <CheckCircle size={13} color="#0f172a" />
                         <Text style={styles.payActionText}>{t('settle', 'Settle')}</Text>
                       </TouchableOpacity>
+                    </View>
+                  )}
+
+                  {isCancelled && (
+                    <View style={styles.cancelledBadgeBox}>
+                      <Text style={styles.cancelledBadgeText}>VOID</Text>
                     </View>
                   )}
                 </View>
@@ -363,6 +397,19 @@ const styles = StyleSheet.create({
     marginTop: 2,
     fontWeight: '600',
   },
+  invoiceCardCancelled: {
+    backgroundColor: '#f8fafc',
+    borderColor: '#e2e8f0',
+    opacity: 0.85,
+  },
+  invoiceNumCancelled: {
+    color: '#64748b',
+    textDecorationLine: 'line-through',
+  },
+  amountTextCancelled: {
+    color: '#64748b',
+    textDecorationLine: 'line-through',
+  },
   statusBadge: {
     paddingHorizontal: 8,
     paddingVertical: 4,
@@ -374,6 +421,11 @@ const styles = StyleSheet.create({
   statusPending: {
     backgroundColor: '#fffbeb',
   },
+  statusCancelled: {
+    backgroundColor: '#fef2f2',
+    borderWidth: 1,
+    borderColor: '#fecaca',
+  },
   statusText: {
     fontSize: 10,
     fontWeight: '800',
@@ -383,6 +435,29 @@ const styles = StyleSheet.create({
   },
   statusTextPending: {
     color: '#d97706',
+  },
+  statusTextCancelled: {
+    color: '#dc2626',
+  },
+  cancelledSubText: {
+    fontSize: 10,
+    color: '#dc2626',
+    fontWeight: '700',
+    marginTop: 2,
+  },
+  cancelledBadgeBox: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    backgroundColor: '#fef2f2',
+    borderWidth: 1,
+    borderColor: '#fecaca',
+  },
+  cancelledBadgeText: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: '#dc2626',
+    letterSpacing: 1,
   },
   cardDivider: {
     height: 1,

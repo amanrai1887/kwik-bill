@@ -80,13 +80,30 @@ export async function updateClient(id: number, data: any) {
   return res.json();
 }
 
+export async function toggleClientStatus(id: number, isActive?: boolean) {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`/api/clients/${id}/toggle-status`, {
+    method: 'PATCH',
+    headers,
+    body: JSON.stringify({ isActive }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || 'Failed to update client status');
+  }
+  return res.json();
+}
+
 export async function deleteClient(id: number) {
   const headers = await getAuthHeaders();
   const res = await fetch(`/api/clients/${id}`, {
     method: 'DELETE',
     headers,
   });
-  if (!res.ok) throw new Error('Failed to delete client');
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || 'Failed to delete client');
+  }
   return res.json();
 }
 
