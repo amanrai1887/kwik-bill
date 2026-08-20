@@ -34,10 +34,11 @@ export const MonthlyReportsView: React.FC<MonthlyReportsViewProps> = ({ analytic
     totalInvoicesCount: 0,
   };
 
-  // Compute GST and TDS totals across invoices
-  const totalTaxAmount = invoices.reduce((sum, inv) => sum + (parseFloat(inv.taxAmount) || 0), 0);
-  const totalTdsAmount = invoices.reduce((sum, inv) => sum + (parseFloat(inv.tdsAmount) || 0), 0);
-  const totalSubtotal = invoices.reduce((sum, inv) => sum + (parseFloat(inv.subtotal) || 0), 0);
+  // Compute GST and TDS totals across active non-cancelled invoices
+  const activeInvoices = invoices.filter((inv) => inv.status !== 'cancelled' && !inv.isCancelled);
+  const totalTaxAmount = activeInvoices.reduce((sum, inv) => sum + (parseFloat(inv.taxAmount) || 0), 0);
+  const totalTdsAmount = activeInvoices.reduce((sum, inv) => sum + (parseFloat(inv.tdsAmount) || 0), 0);
+  const totalSubtotal = activeInvoices.reduce((sum, inv) => sum + (parseFloat(inv.subtotal) || 0), 0);
 
   const formatCurrency = (num: number) => {
     return `₹${num.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;

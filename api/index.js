@@ -1253,13 +1253,16 @@ async function getReminderLogsByUserId(userId) {
       log: reminderLogs,
       client: clients,
       invoice: invoices
-    }).from(reminderLogs).innerJoin(clients, eq7(reminderLogs.clientId, clients.id)).innerJoin(invoices, eq7(reminderLogs.invoiceId, invoices.id)).where(eq7(reminderLogs.userId, userId)).orderBy(desc5(reminderLogs.sentAt));
+    }).from(reminderLogs).leftJoin(clients, eq7(reminderLogs.clientId, clients.id)).leftJoin(invoices, eq7(reminderLogs.invoiceId, invoices.id)).where(eq7(reminderLogs.userId, userId)).orderBy(desc5(reminderLogs.sentAt));
     return logs.map((l) => ({
       ...l.log,
-      clientName: l.client.name,
-      companyName: l.client.companyName,
-      invoiceNumber: l.invoice.invoiceNumber,
-      invoiceAmount: l.invoice.totalAmount
+      clientName: l.client?.name || "Customer",
+      companyName: l.client?.companyName || "",
+      clientIsActive: l.client?.isActive !== false,
+      invoiceNumber: l.invoice?.invoiceNumber || "",
+      invoiceAmount: l.invoice?.totalAmount || "0.00",
+      invoiceStatus: l.invoice?.status || "unknown",
+      isCancelled: l.invoice?.isCancelled || l.invoice?.status === "cancelled"
     }));
   } catch (error) {
     console.error("Failed to fetch reminder logs:", error);
@@ -1396,6 +1399,16 @@ async function getAnalytics(req, res) {
     const invoicesList = await getInvoicesByUserId(userId);
     const paymentsList = await getPaymentsForUser(userId);
     const clientsList = await getClientsByUserId(userId);
+    const activeInvoices = invoicesList.filter(
+      (inv) => inv.status !== "cancelled" && !inv.isCancelled
+    );
+    const cancelledInvoices = invoicesList.filter(
+      (inv) => inv.status === "cancelled" || inv.isCancelled
+    );
+    const activeInvoiceIds = new Set(activeInvoices.map((i) => i.id));
+    const activePayments = paymentsList.filter((p) => activeInvoiceIds.has(p.invoiceId));
+    const activeClients = clientsList.filter((c) => c.isActive !== false);
+    const disabledClients = clientsList.filter((c) => c.isActive === false);
     let totalInvoiced = 0;
     let totalCollected = 0;
     let totalPending = 0;
@@ -1410,14 +1423,14 @@ async function getAnalytics(req, res) {
     const todayStr = today.toISOString().split("T")[0];
     const in7Days = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1e3).toISOString().split("T")[0];
     const in30Days = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1e3).toISOString().split("T")[0];
-    invoicesList.forEach((inv) => {
+    activeInvoices.forEach((inv) => {
       const total = parseFloat(inv.totalAmount || "0");
       const paid = parseFloat(inv.paidAmount || "0");
       const outstanding = Math.max(0, total - paid);
       totalInvoiced += total;
       totalCollected += paid;
-      if (inv.status === "paid") {
-      } else if (inv.status === "overdue" || inv.dueDate < todayStr) {
+      if (inv.status === "paid" || outstanding <= 0) {
+      } else if (inv.status === "overdue" || inv.dueDate && inv.dueDate < todayStr) {
         totalOverdue += outstanding;
         if (inv.dueDate) {
           const due = new Date(inv.dueDate);
@@ -1441,15 +1454,19 @@ async function getAnalytics(req, res) {
     });
     const clientRiskMap = {};
     clientsList.forEach((c) => {
-      const clientInvoices = invoicesList.filter((i) => i.clientId === c.id);
-      if (clientInvoices.length === 0) {
+      if (c.isActive === false) {
+        clientRiskMap[c.id] = { score: 0, riskLevel: "low", label: "Disabled Party (Inactive)", avgDelayDays: 0 };
+        return;
+      }
+      const clientActiveInvoices = activeInvoices.filter((i) => i.clientId === c.id);
+      if (clientActiveInvoices.length === 0) {
         clientRiskMap[c.id] = { score: 95, riskLevel: "low", label: "New Party \u2022 Reliable", avgDelayDays: 0 };
         return;
       }
       let totalClientOverdue = 0;
       let totalClientBilled = 0;
       let overdueCount = 0;
-      clientInvoices.forEach((i) => {
+      clientActiveInvoices.forEach((i) => {
         const tot = parseFloat(i.totalAmount || "0");
         const pd = parseFloat(i.paidAmount || "0");
         totalClientBilled += tot;
@@ -1477,7 +1494,7 @@ async function getAnalytics(req, res) {
       const monthName = months[mIdx];
       let monthInvoiced = 0;
       let monthCollected = 0;
-      invoicesList.forEach((inv) => {
+      activeInvoices.forEach((inv) => {
         if (inv.issueDate) {
           const d = new Date(inv.issueDate);
           if (d.getMonth() === mIdx) {
@@ -1485,7 +1502,7 @@ async function getAnalytics(req, res) {
           }
         }
       });
-      paymentsList.forEach((p) => {
+      activePayments.forEach((p) => {
         if (p.paymentDate) {
           const d = new Date(p.paymentDate);
           if (d.getMonth() === mIdx) {
@@ -1508,8 +1525,11 @@ async function getAnalytics(req, res) {
         totalCollected,
         totalPending,
         totalOverdue,
-        totalInvoicesCount: invoicesList.length,
+        totalInvoicesCount: activeInvoices.length,
+        totalCancelledInvoicesCount: cancelledInvoices.length,
         totalClientsCount: clientsList.length,
+        activeClientsCount: activeClients.length,
+        disabledClientsCount: disabledClients.length,
         collectionRate,
         expectedNext7Days,
         expectedNext30Days,

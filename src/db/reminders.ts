@@ -43,17 +43,20 @@ export async function getReminderLogsByUserId(userId: number) {
         invoice: invoices,
       })
       .from(reminderLogs)
-      .innerJoin(clients, eq(reminderLogs.clientId, clients.id))
-      .innerJoin(invoices, eq(reminderLogs.invoiceId, invoices.id))
+      .leftJoin(clients, eq(reminderLogs.clientId, clients.id))
+      .leftJoin(invoices, eq(reminderLogs.invoiceId, invoices.id))
       .where(eq(reminderLogs.userId, userId))
       .orderBy(desc(reminderLogs.sentAt));
 
-    return logs.map(l => ({
+    return logs.map((l) => ({
       ...l.log,
-      clientName: l.client.name,
-      companyName: l.client.companyName,
-      invoiceNumber: l.invoice.invoiceNumber,
-      invoiceAmount: l.invoice.totalAmount,
+      clientName: l.client?.name || 'Customer',
+      companyName: l.client?.companyName || '',
+      clientIsActive: l.client?.isActive !== false,
+      invoiceNumber: l.invoice?.invoiceNumber || '',
+      invoiceAmount: l.invoice?.totalAmount || '0.00',
+      invoiceStatus: l.invoice?.status || 'unknown',
+      isCancelled: l.invoice?.isCancelled || l.invoice?.status === 'cancelled',
     }));
   } catch (error) {
     console.error("Failed to fetch reminder logs:", error);

@@ -11,7 +11,21 @@ export async function getAnalytics(req: AuthRequest, res: Response) {
     const paymentsList = await getPaymentsForUser(userId);
     const clientsList = await getClientsByUserId(userId);
 
-    // Calculations
+    // Filter active (non-cancelled / non-voided) invoices
+    const activeInvoices = invoicesList.filter(
+      (inv) => inv.status !== 'cancelled' && !inv.isCancelled
+    );
+    const cancelledInvoices = invoicesList.filter(
+      (inv) => inv.status === 'cancelled' || inv.isCancelled
+    );
+
+    const activeInvoiceIds = new Set(activeInvoices.map((i) => i.id));
+    const activePayments = paymentsList.filter((p) => activeInvoiceIds.has(p.invoiceId));
+
+    const activeClients = clientsList.filter((c) => c.isActive !== false);
+    const disabledClients = clientsList.filter((c) => c.isActive === false);
+
+    // Calculations across active non-cancelled invoices
     let totalInvoiced = 0;
     let totalCollected = 0;
     let totalPending = 0;
@@ -32,7 +46,7 @@ export async function getAnalytics(req: AuthRequest, res: Response) {
     const in7Days = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
     const in30Days = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
-    invoicesList.forEach(inv => {
+    activeInvoices.forEach((inv) => {
       const total = parseFloat(inv.totalAmount || '0');
       const paid = parseFloat(inv.paidAmount || '0');
       const outstanding = Math.max(0, total - paid);
@@ -40,9 +54,9 @@ export async function getAnalytics(req: AuthRequest, res: Response) {
       totalInvoiced += total;
       totalCollected += paid;
 
-      if (inv.status === 'paid') {
+      if (inv.status === 'paid' || outstanding <= 0) {
         // completely paid
-      } else if (inv.status === 'overdue' || inv.dueDate < todayStr) {
+      } else if (inv.status === 'overdue' || (inv.dueDate && inv.dueDate < todayStr)) {
         totalOverdue += outstanding;
 
         // Calculate days overdue for ageing buckets
@@ -69,11 +83,19 @@ export async function getAnalytics(req: AuthRequest, res: Response) {
     });
 
     // 🤖 AI Client Credit Scoring & Risk Categorization
-    const clientRiskMap: Record<number, { score: number; riskLevel: 'low' | 'medium' | 'high'; label: string; avgDelayDays: number }> = {};
+    const clientRiskMap: Record<
+      number,
+      { score: number; riskLevel: 'low' | 'medium' | 'high'; label: string; avgDelayDays: number }
+    > = {};
     
-    clientsList.forEach(c => {
-      const clientInvoices = invoicesList.filter(i => i.clientId === c.id);
-      if (clientInvoices.length === 0) {
+    clientsList.forEach((c) => {
+      if (c.isActive === false) {
+        clientRiskMap[c.id] = { score: 0, riskLevel: 'low', label: 'Disabled Party (Inactive)', avgDelayDays: 0 };
+        return;
+      }
+
+      const clientActiveInvoices = activeInvoices.filter((i) => i.clientId === c.id);
+      if (clientActiveInvoices.length === 0) {
         clientRiskMap[c.id] = { score: 95, riskLevel: 'low', label: 'New Party • Reliable', avgDelayDays: 0 };
         return;
       }
@@ -82,7 +104,7 @@ export async function getAnalytics(req: AuthRequest, res: Response) {
       let totalClientBilled = 0;
       let overdueCount = 0;
 
-      clientInvoices.forEach(i => {
+      clientActiveInvoices.forEach((i) => {
         const tot = parseFloat(i.totalAmount || '0');
         const pd = parseFloat(i.paidAmount || '0');
         totalClientBilled += tot;
@@ -92,8 +114,8 @@ export async function getAnalytics(req: AuthRequest, res: Response) {
         }
       });
 
-      const overdueRatio = totalClientBilled > 0 ? (totalClientOverdue / totalClientBilled) : 0;
-      let score = 100 - Math.round(overdueRatio * 60) - (overdueCount * 8);
+      const overdueRatio = totalClientBilled > 0 ? totalClientOverdue / totalClientBilled : 0;
+      let score = 100 - Math.round(overdueRatio * 60) - overdueCount * 8;
       score = Math.max(20, Math.min(99, score));
 
       if (score >= 80) {
@@ -117,7 +139,7 @@ export async function getAnalytics(req: AuthRequest, res: Response) {
       let monthInvoiced = 0;
       let monthCollected = 0;
 
-      invoicesList.forEach(inv => {
+      activeInvoices.forEach((inv) => {
         if (inv.issueDate) {
           const d = new Date(inv.issueDate);
           if (d.getMonth() === mIdx) {
@@ -126,7 +148,7 @@ export async function getAnalytics(req: AuthRequest, res: Response) {
         }
       });
 
-      paymentsList.forEach(p => {
+      activePayments.forEach((p) => {
         if (p.paymentDate) {
           const d = new Date(p.paymentDate);
           if (d.getMonth() === mIdx) {
@@ -153,8 +175,11 @@ export async function getAnalytics(req: AuthRequest, res: Response) {
         totalCollected,
         totalPending,
         totalOverdue,
-        totalInvoicesCount: invoicesList.length,
+        totalInvoicesCount: activeInvoices.length,
+        totalCancelledInvoicesCount: cancelledInvoices.length,
         totalClientsCount: clientsList.length,
+        activeClientsCount: activeClients.length,
+        disabledClientsCount: disabledClients.length,
         collectionRate,
         expectedNext7Days,
         expectedNext30Days,
@@ -173,3 +198,4 @@ export async function getAnalytics(req: AuthRequest, res: Response) {
     res.status(500).json({ error: error.message || "Failed to generate analytics" });
   }
 }
+
