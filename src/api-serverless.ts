@@ -1,6 +1,6 @@
 import express from "express";
-import apiRouter from "../src/routes/index.ts";
-import { initializeDatabase } from "../src/db/init.ts";
+import apiRouter from "./routes/index.ts";
+import { initializeDatabase } from "./db/init.ts";
 import * as dotenv from "dotenv";
 
 dotenv.config();
@@ -36,7 +36,7 @@ app.use(async (req, res, next) => {
   next();
 });
 
-// Mount router on both /api and root / so all rewrites resolve
+// Mount router on both /api and root / so all rewrites resolve properly
 app.use("/api", apiRouter);
 app.use("/", apiRouter);
 
