@@ -105,6 +105,16 @@ export async function initializeDatabase() {
       );
     `);
 
+    // Ensure all invoice columns exist for GST compliance and security isolation
+    await pool.query(`
+      ALTER TABLE invoices ADD COLUMN IF NOT EXISTS place_of_supply TEXT DEFAULT '';
+      ALTER TABLE invoices ADD COLUMN IF NOT EXISTS is_rcm BOOLEAN DEFAULT false;
+      ALTER TABLE invoices ADD COLUMN IF NOT EXISTS tax_type TEXT DEFAULT 'intra_state';
+      ALTER TABLE invoices ADD COLUMN IF NOT EXISTS share_token TEXT DEFAULT '';
+      ALTER TABLE invoices ADD COLUMN IF NOT EXISTS is_cancelled BOOLEAN DEFAULT false;
+      ALTER TABLE invoices ADD COLUMN IF NOT EXISTS cancel_reason TEXT DEFAULT '';
+    `);
+
     // Create payments table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS payments (

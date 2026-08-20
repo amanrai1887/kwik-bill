@@ -30,6 +30,11 @@ import {
 import { api } from '../api/endpoints.ts';
 import { useMobileAuth } from '../context/AuthContext.tsx';
 import { Client, InvoiceItem } from '../types/index.ts';
+import { 
+  INDIAN_STATES, 
+  calculateGstBreakdown, 
+  getStateCodeFromGstin 
+} from '../utils/gstCompliance.ts';
 
 type IndustryType = 'transport' | 'agency' | 'gym' | 'coaching' | 'retail' | 'freelancer' | 'consultant';
 
@@ -43,6 +48,11 @@ export const InvoiceCreateScreen: React.FC<{ navigation: any }> = ({ navigation 
   const [issueDate, setIssueDate] = useState(new Date().toISOString().split('T')[0]);
   const nextWeek = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
   const [dueDate, setDueDate] = useState(nextWeek);
+
+  // GST Compliance States
+  const [placeOfSupply, setPlaceOfSupply] = useState<string>('27');
+  const [isRcm, setIsRcm] = useState<boolean>(false);
+  const [taxType, setTaxType] = useState<'intra_state' | 'inter_state'>('intra_state');
 
   // Industry Workflow Selector
   const [industryType, setIndustryType] = useState<IndustryType>('transport');
@@ -108,10 +118,31 @@ export const InvoiceCreateScreen: React.FC<{ navigation: any }> = ({ navigation 
         if (Array.isArray(res) && res.length > 0) {
           setClients(res);
           setSelectedClientId(res[0].id);
+          const stateCode = getStateCodeFromGstin(res[0].gstin);
+          if (stateCode) setPlaceOfSupply(stateCode);
         }
       })
       .catch(() => {});
   }, []);
+
+  // When selected client changes, update state and tax type
+  useEffect(() => {
+    if (selectedClientId) {
+      const cl = clients.find(c => c.id === selectedClientId);
+      if (cl?.gstin) {
+        const sc = getStateCodeFromGstin(cl.gstin);
+        if (sc) setPlaceOfSupply(sc);
+      }
+    }
+  }, [selectedClientId, clients]);
+
+  // Auto detect intra vs inter state
+  useEffect(() => {
+    const suppCode = getStateCodeFromGstin(user?.gstin) || '27';
+    if (suppCode && placeOfSupply) {
+      setTaxType(suppCode === placeOfSupply ? 'intra_state' : 'inter_state');
+    }
+  }, [placeOfSupply, user?.gstin]);
 
   const handleAddItem = () => {
     setItems([
@@ -150,9 +181,23 @@ export const InvoiceCreateScreen: React.FC<{ navigation: any }> = ({ navigation 
   const tdsAmount = (subtotal * tdsRate) / 100;
   const totalAmount = Math.max(0, subtotal + taxAmount - tdsAmount - discountAmount);
 
+  // GST Breakdown
+  const gstBreakdown = calculateGstBreakdown(
+    taxRate,
+    subtotal,
+    user?.gstin || '27',
+    placeOfSupply,
+    taxType === 'inter_state'
+  );
+
   const handleCreate = async () => {
     if (!selectedClientId) {
       Alert.alert('Required', 'Please select or add a client.');
+      return;
+    }
+
+    if (invoiceNumber.trim().length > 16) {
+      Alert.alert('GST Rule 46', 'Invoice number must be 16 characters or less.');
       return;
     }
 
@@ -186,6 +231,9 @@ export const InvoiceCreateScreen: React.FC<{ navigation: any }> = ({ navigation 
         invoiceNumber,
         issueDate,
         dueDate,
+        placeOfSupply,
+        isRcm,
+        taxType,
         status: 'sent',
         items,
         subtotal: subtotal.toFixed(2),
@@ -346,6 +394,78 @@ export const InvoiceCreateScreen: React.FC<{ navigation: any }> = ({ navigation 
               <TextInput style={styles.input} value={dueDate} onChangeText={setDueDate} />
             </View>
           </View>
+        </View>
+
+        {/* GST Statutory Compliance Card */}
+        <View style={styles.card}>
+          <View style={styles.cardHeaderRow}>
+            <View style={styles.iconWrapEmerald}>
+              <Sparkles size={16} color="#059669" />
+            </View>
+            <Text style={styles.sectionTitle}>GST Statutory Compliance (Rule 46)</Text>
+          </View>
+
+          <Text style={styles.label}>Place of Supply (State / UT) *</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.clientScroll}>
+            {INDIAN_STATES.slice(0, 15).map((s) => (
+              <TouchableOpacity
+                key={s.code}
+                onPress={() => setPlaceOfSupply(s.code)}
+                style={[styles.clientChip, placeOfSupply === s.code && styles.clientChipActive]}
+                activeOpacity={0.8}
+              >
+                <Text
+                  style={[
+                    styles.clientChipText,
+                    placeOfSupply === s.code && styles.clientChipTextActive,
+                  ]}
+                >
+                  {s.code} - {s.name}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#f1f5f9' }}>
+            <View>
+              <Text style={{ fontSize: 12, fontWeight: '700', color: '#0f172a' }}>Supply Type</Text>
+              <Text style={{ fontSize: 11, color: '#64748b' }}>
+                {taxType === 'inter_state' ? 'Inter-State (IGST)' : 'Intra-State (CGST + SGST)'}
+              </Text>
+            </View>
+            <TouchableOpacity
+              onPress={() => setTaxType(taxType === 'intra_state' ? 'inter_state' : 'intra_state')}
+              style={[styles.gstChip, { backgroundColor: '#f1f5f9' }]}
+            >
+              <Text style={[styles.gstChipText, { color: '#4f46e5' }]}>
+                Switch to {taxType === 'intra_state' ? 'IGST' : 'CGST+SGST'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          <TouchableOpacity
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#f1f5f9' }}
+            onPress={() => setIsRcm(!isRcm)}
+            activeOpacity={0.8}
+          >
+            <View
+              style={{
+                width: 18,
+                height: 18,
+                borderRadius: 5,
+                backgroundColor: isRcm ? '#d97706' : '#ffffff',
+                borderWidth: 1.5,
+                borderColor: isRcm ? '#d97706' : '#94a3b8',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              {isRcm && <Check size={12} color="#ffffff" strokeWidth={3} />}
+            </View>
+            <Text style={{ fontSize: 12, fontWeight: '700', color: '#0f172a' }}>
+              Tax Payable on Reverse Charge (RCM): {isRcm ? 'YES' : 'NO'}
+            </Text>
+          </TouchableOpacity>
         </View>
 
         {/* Industry Workflow Selector */}
@@ -566,7 +686,7 @@ export const InvoiceCreateScreen: React.FC<{ navigation: any }> = ({ navigation 
               </View>
 
               <View style={styles.row}>
-                <View style={[styles.col, { flex: 1.2 }]}>
+                <View style={[styles.col, { flex: 1.1 }]}>
                   <Text style={styles.label}>HSN/SAC</Text>
                   <TextInput
                     style={[styles.input, { fontFamily: 'monospace' }]}
@@ -576,7 +696,7 @@ export const InvoiceCreateScreen: React.FC<{ navigation: any }> = ({ navigation 
                   />
                 </View>
 
-                <View style={styles.col}>
+                <View style={[styles.col, { flex: 0.9 }]}>
                   <Text style={styles.label}>Qty</Text>
                   <TextInput
                     style={styles.input}
@@ -586,7 +706,17 @@ export const InvoiceCreateScreen: React.FC<{ navigation: any }> = ({ navigation 
                   />
                 </View>
 
-                <View style={[styles.col, { flex: 1.5 }]}>
+                <View style={[styles.col, { flex: 1 }]}>
+                  <Text style={styles.label}>Unit (UQC)</Text>
+                  <TextInput
+                    style={[styles.input, { textTransform: 'uppercase', fontFamily: 'monospace', fontWeight: '700' }]}
+                    placeholder="NOS"
+                    value={item.uqc || 'NOS'}
+                    onChangeText={(val) => handleUpdateItem(index, 'uqc', val.toUpperCase())}
+                  />
+                </View>
+
+                <View style={[styles.col, { flex: 1.4 }]}>
                   <Text style={styles.label}>Rate (₹)</Text>
                   <TextInput
                     style={[styles.input, { fontFamily: 'monospace', fontWeight: '800' }]}
@@ -741,13 +871,26 @@ export const InvoiceCreateScreen: React.FC<{ navigation: any }> = ({ navigation 
         {/* Summary Breakdown Card */}
         <View style={styles.summaryCard}>
           <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Items Subtotal</Text>
+            <Text style={styles.summaryLabel}>Taxable Subtotal</Text>
             <Text style={styles.summaryVal}>₹{subtotal.toLocaleString('en-IN')}</Text>
           </View>
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>GST ({taxRate}%)</Text>
-            <Text style={styles.summaryVal}>+ ₹{taxAmount.toLocaleString('en-IN')}</Text>
-          </View>
+          {gstBreakdown.isInterState ? (
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>IGST ({gstBreakdown.igstRate}%)</Text>
+              <Text style={styles.summaryVal}>+ ₹{gstBreakdown.igstAmount.toLocaleString('en-IN')}</Text>
+            </View>
+          ) : (
+            <>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>CGST ({gstBreakdown.cgstRate}%)</Text>
+                <Text style={styles.summaryVal}>+ ₹{gstBreakdown.cgstAmount.toLocaleString('en-IN')}</Text>
+              </View>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>SGST ({gstBreakdown.sgstRate}%)</Text>
+                <Text style={styles.summaryVal}>+ ₹{gstBreakdown.sgstAmount.toLocaleString('en-IN')}</Text>
+              </View>
+            </>
+          )}
           {tdsAmount > 0 && (
             <View style={styles.summaryRow}>
               <Text style={styles.summaryLabel}>TDS Deducted ({tdsRate}%)</Text>

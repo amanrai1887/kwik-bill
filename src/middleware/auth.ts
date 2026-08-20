@@ -14,21 +14,23 @@ export const requireAuth = async (
   next: NextFunction
 ) => {
   const authHeader = req.headers.authorization;
+  const isDevOrDemo = process.env.NODE_ENV !== 'production' && process.env.ALLOW_DEMO_AUTH === 'true';
   
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    // If no auth header, support fallback demo user session for smooth testing
-    const demoUid = (req.headers['x-demo-user-id'] as string) || 'demo-business-owner-101';
-    const demoEmail = (req.headers['x-demo-email'] as string) || 'owner@speedytrans.in';
-    
-    try {
-      const dbUser = await getOrCreateUser(demoUid, demoEmail, 'Speedy Transport & Logistics');
-      req.user = { uid: demoUid, email: demoEmail, name: 'Speedy Transport Logistics' };
-      req.dbUser = dbUser;
-      return next();
-    } catch (err) {
-      console.error('Error creating/fetching fallback user:', err);
-      return res.status(500).json({ error: 'Database session initialization error' });
+    if (isDevOrDemo) {
+      const demoUid = 'demo-business-owner-101';
+      const demoEmail = 'owner@speedytrans.in';
+      try {
+        const dbUser = await getOrCreateUser(demoUid, demoEmail, 'Speedy Transport & Logistics');
+        req.user = { uid: demoUid, email: demoEmail, name: 'Speedy Transport Logistics' };
+        req.dbUser = dbUser;
+        return next();
+      } catch (err) {
+        console.error('Error creating/fetching fallback user:', err);
+        return res.status(500).json({ error: 'Database session initialization error' });
+      }
     }
+    return res.status(401).json({ error: 'Unauthorized: Missing or invalid Authorization header.' });
   }
 
   const token = authHeader.split('Bearer ')[1];
@@ -40,12 +42,15 @@ export const requireAuth = async (
     next();
   } catch (error) {
     console.error('Error verifying Firebase ID token:', error);
-    // Graceful fallback for mock tokens or guest demo
-    const demoUid = 'demo-business-owner-101';
-    const demoEmail = 'owner@speedytrans.in';
-    const dbUser = await getOrCreateUser(demoUid, demoEmail, 'Speedy Transport & Logistics');
-    req.user = { uid: demoUid, email: demoEmail, name: 'Speedy Transport Logistics' };
-    req.dbUser = dbUser;
-    next();
+    if (isDevOrDemo) {
+      const demoUid = 'demo-business-owner-101';
+      const demoEmail = 'owner@speedytrans.in';
+      const dbUser = await getOrCreateUser(demoUid, demoEmail, 'Speedy Transport & Logistics');
+      req.user = { uid: demoUid, email: demoEmail, name: 'Speedy Transport Logistics' };
+      req.dbUser = dbUser;
+      return next();
+    }
+    return res.status(401).json({ error: 'Unauthorized: Invalid or expired authentication token.' });
   }
 };
+

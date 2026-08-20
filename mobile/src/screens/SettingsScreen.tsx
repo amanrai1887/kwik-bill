@@ -15,6 +15,7 @@ import { useMobileAuth } from '../context/AuthContext.tsx';
 import { useLanguage } from '../context/LanguageContext.tsx';
 import { api } from '../api/endpoints.ts';
 import { PlanSelectionModal } from '../components/PlanSelectionModal.tsx';
+import { LegalComplianceModal } from '../components/LegalComplianceModal.tsx';
 
 export const SettingsScreen: React.FC = () => {
   const { user, logout, refreshProfile } = useMobileAuth();
@@ -39,6 +40,8 @@ export const SettingsScreen: React.FC = () => {
   const [whatsappApiToken, setWhatsappApiToken] = useState(user?.whatsappApiToken || '');
 
   const [showPlanModal, setShowPlanModal] = useState(false);
+  const [showLegalModal, setShowLegalModal] = useState(false);
+  const [legalTab, setLegalTab] = useState<'gst' | 'payments' | 'terms' | 'privacy'>('gst');
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
@@ -321,6 +324,65 @@ export const SettingsScreen: React.FC = () => {
           />
         </View>
 
+        {/* Government & Legal Compliance Center Card */}
+        <View style={[styles.card, { backgroundColor: '#f8fafc', borderColor: '#e2e8f0' }]}>
+          <View style={styles.cardHeaderRow}>
+            <View style={[styles.sectionIconWrap, { backgroundColor: '#4f46e5' }]}>
+              <Shield size={16} color="#ffffff" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.cardTitle}>Legal & Statutory Compliance</Text>
+              <Text style={styles.cardSub}>CGST Rule 46 • IT Act 2000 • DPDP 2023</Text>
+            </View>
+          </View>
+
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 }}>
+            <TouchableOpacity
+              onPress={() => {
+                setLegalTab('gst');
+                setShowLegalModal(true);
+              }}
+              style={{ flex: 1, minWidth: '45%', backgroundColor: '#ffffff', padding: 10, borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0' }}
+            >
+              <Text style={{ fontSize: 9.5, fontWeight: '800', color: '#4f46e5', textTransform: 'uppercase' }}>Tax Mandate</Text>
+              <Text style={{ fontSize: 11.5, fontWeight: '800', color: '#0f172a', marginTop: 2 }}>GST Rule 46</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => {
+                setLegalTab('payments');
+                setShowLegalModal(true);
+              }}
+              style={{ flex: 1, minWidth: '45%', backgroundColor: '#ffffff', padding: 10, borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0' }}
+            >
+              <Text style={{ fontSize: 9.5, fontWeight: '800', color: '#4f46e5', textTransform: 'uppercase' }}>Payments</Text>
+              <Text style={{ fontSize: 11.5, fontWeight: '800', color: '#0f172a', marginTop: 2 }}>NPCI Direct UPI</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => {
+                setLegalTab('privacy');
+                setShowLegalModal(true);
+              }}
+              style={{ flex: 1, minWidth: '45%', backgroundColor: '#ffffff', padding: 10, borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0' }}
+            >
+              <Text style={{ fontSize: 9.5, fontWeight: '800', color: '#4f46e5', textTransform: 'uppercase' }}>Data Privacy</Text>
+              <Text style={{ fontSize: 11.5, fontWeight: '800', color: '#0f172a', marginTop: 2 }}>DPDP Act 2023</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => {
+                setLegalTab('terms');
+                setShowLegalModal(true);
+              }}
+              style={{ flex: 1, minWidth: '45%', backgroundColor: '#ffffff', padding: 10, borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0' }}
+            >
+              <Text style={{ fontSize: 9.5, fontWeight: '800', color: '#4f46e5', textTransform: 'uppercase' }}>SaaS Terms</Text>
+              <Text style={{ fontSize: 11.5, fontWeight: '800', color: '#0f172a', marginTop: 2 }}>Service Terms</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
         {/* Save Button with Gradient */}
         <TouchableOpacity
           onPress={handleSaveProfile}
@@ -351,6 +413,12 @@ export const SettingsScreen: React.FC = () => {
         </TouchableOpacity>
       </ScrollView>
 
+      {/* Legal & Compliance Modal */}
+      <LegalComplianceModal
+        visible={showLegalModal}
+        onClose={() => setShowLegalModal(false)}
+        initialTab={legalTab}
+      />
 
       {/* Plan Selection Modal */}
       <PlanSelectionModal

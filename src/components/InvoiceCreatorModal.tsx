@@ -10,9 +10,12 @@ import {
   IndianRupee, 
   Calculator, 
   FileText,
-  UserPlus
+  UserPlus,
+  Scale,
+  ShieldCheck
 } from 'lucide-react';
 import { Client, IndustryType, InvoiceItem, UserProfile } from '../lib/types.ts';
+import { INDIAN_STATES, calculateGstBreakdown, getStateCodeFromGstin } from '../lib/gstCompliance.ts';
 
 interface InvoiceCreatorModalProps {
   isOpen: boolean;
@@ -42,6 +45,12 @@ export const InvoiceCreatorModal: React.FC<InvoiceCreatorModalProps> = ({
   const [dueDate, setDueDate] = useState<string>(dueDefault);
   const [industryType, setIndustryType] = useState<IndustryType>(profile?.industryType || 'transport');
 
+  // GST Compliance Fields
+  const supplierState = getStateCodeFromGstin(profile?.gstin) || '27';
+  const [placeOfSupply, setPlaceOfSupply] = useState<string>(supplierState);
+  const [isRcm, setIsRcm] = useState<boolean>(false);
+  const [taxType, setTaxType] = useState<'intra_state' | 'inter_state'>('intra_state');
+
   // Recurring Schedule Opt-in State
   const [isRecurring, setIsRecurring] = useState(false);
   const [recurringFrequency, setRecurringFrequency] = useState('monthly');
@@ -49,7 +58,6 @@ export const InvoiceCreatorModal: React.FC<InvoiceCreatorModalProps> = ({
 
   // Ensure clientId is valid when clients array loads or changes
   useEffect(() => {
-
     if (clients.length > 0) {
       if (!clientId || !clients.some(c => c.id === clientId)) {
         setClientId(clients[0].id);
@@ -99,19 +107,42 @@ export const InvoiceCreatorModal: React.FC<InvoiceCreatorModalProps> = ({
 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Sync selected client default industry if changed
+  // Sync selected client default industry and state if changed
   useEffect(() => {
     const selected = clients.find((c) => c.id === clientId);
-    if (selected && selected.industryType) {
-      setIndustryType(selected.industryType);
+    if (selected) {
+      if (selected.industryType) {
+        setIndustryType(selected.industryType);
+      }
+      const clientState = getStateCodeFromGstin(selected.gstin);
+      if (clientState) {
+        setPlaceOfSupply(clientState);
+      }
     }
   }, [clientId, clients]);
+
+  // Auto detect intra vs inter state
+  useEffect(() => {
+    const suppCode = getStateCodeFromGstin(profile?.gstin);
+    if (suppCode && placeOfSupply) {
+      setTaxType(suppCode === placeOfSupply ? 'intra_state' : 'inter_state');
+    }
+  }, [placeOfSupply, profile?.gstin]);
 
   // Calculation Math
   const subtotal = items.reduce((sum, it) => sum + (it.quantity * it.rate || 0), 0);
   const taxAmount = (subtotal * taxRate) / 100;
   const tdsAmount = (subtotal * tdsRate) / 100;
   const totalAmount = Math.max(0, subtotal + taxAmount - tdsAmount - discountAmount);
+
+  // GST Breakdown
+  const gstBreakdown = calculateGstBreakdown(
+    taxRate,
+    subtotal,
+    profile?.gstin,
+    placeOfSupply,
+    taxType === 'inter_state'
+  );
 
   const handleItemChange = (index: number, field: keyof InvoiceItem, val: any) => {
     const next = [...items];
@@ -126,7 +157,7 @@ export const InvoiceCreatorModal: React.FC<InvoiceCreatorModalProps> = ({
   const addItemRow = () => {
     setItems([
       ...items,
-      { description: 'Additional Service / Item', quantity: 1, rate: 2000, amount: 2000 },
+      { description: 'Additional Service / Item', quantity: 1, rate: 2000, amount: 2000, hsnCode: '9983' },
     ]);
   };
 
@@ -141,6 +172,12 @@ export const InvoiceCreatorModal: React.FC<InvoiceCreatorModalProps> = ({
     if (!effectiveClientId) {
       alert('Please add a client first by clicking "+ Add" next to Client / Party');
       onQuickAddClient();
+      return;
+    }
+
+    // Rule 46(b) validation for GST Invoice Number format (max 16 characters)
+    if (invoiceNumber.trim().length > 16) {
+      alert('GST Compliance Warning: As per Rule 46(b) of CGST Rules, Invoice Number must be 16 characters or less.');
       return;
     }
 
@@ -174,6 +211,9 @@ export const InvoiceCreatorModal: React.FC<InvoiceCreatorModalProps> = ({
         invoiceNumber,
         issueDate,
         dueDate,
+        placeOfSupply,
+        isRcm,
+        taxType,
         subtotal: subtotal.toFixed(2),
         taxRate: taxRate.toString(),
         taxAmount: taxAmount.toFixed(2),
@@ -266,11 +306,15 @@ export const InvoiceCreatorModal: React.FC<InvoiceCreatorModalProps> = ({
 
             {/* Invoice Number */}
             <div>
-              <label className="font-bold text-slate-700 uppercase tracking-wider text-[11px] block mb-1.5">
-                Invoice Number *
-              </label>
+              <div className="flex justify-between items-center mb-1.5">
+                <label className="font-bold text-slate-700 uppercase tracking-wider text-[11px]">
+                  Invoice Number *
+                </label>
+                <span className="text-[10px] text-slate-400 font-mono">Max 16 Chars (Rule 46)</span>
+              </div>
               <input
                 type="text"
+                maxLength={16}
                 value={invoiceNumber}
                 onChange={(e) => setInvoiceNumber(e.target.value)}
                 className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-mono font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
@@ -304,6 +348,54 @@ export const InvoiceCreatorModal: React.FC<InvoiceCreatorModalProps> = ({
                   required
                 />
               </div>
+            </div>
+          </div>
+
+          {/* GST Statutory Compliance Bar */}
+          <div className="p-3.5 bg-indigo-50/40 rounded-xl border border-indigo-100 grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
+            <div>
+              <label className="text-[10px] font-bold text-slate-700 uppercase tracking-wider block mb-1">
+                Place of Supply (State) *
+              </label>
+              <select
+                value={placeOfSupply}
+                onChange={(e) => setPlaceOfSupply(e.target.value)}
+                className="w-full p-2 bg-white border border-indigo-200 rounded-lg text-slate-900 font-medium text-xs focus:ring-2 focus:ring-indigo-500/20"
+              >
+                {INDIAN_STATES.map((s) => (
+                  <option key={s.code} value={s.code}>
+                    {s.code} - {s.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="text-[10px] font-bold text-slate-700 uppercase tracking-wider block mb-1">
+                Tax Type (Auto-detected)
+              </label>
+              <select
+                value={taxType}
+                onChange={(e) => setTaxType(e.target.value as any)}
+                className="w-full p-2 bg-white border border-indigo-200 rounded-lg text-slate-900 font-bold text-xs"
+              >
+                <option value="intra_state">Intra-State (CGST + SGST)</option>
+                <option value="inter_state">Inter-State (IGST)</option>
+              </select>
+            </div>
+
+            <div className="pt-2 sm:pt-4">
+              <label className="flex items-center gap-2 cursor-pointer bg-white p-2 rounded-lg border border-indigo-200">
+                <input
+                  type="checkbox"
+                  checked={isRcm}
+                  onChange={(e) => setIsRcm(e.target.checked)}
+                  className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500"
+                />
+                <span className="text-[11px] font-bold text-slate-800">
+                  Reverse Charge (RCM) Applicable
+                </span>
+              </label>
             </div>
           </div>
 
@@ -523,11 +615,12 @@ export const InvoiceCreatorModal: React.FC<InvoiceCreatorModalProps> = ({
               <table className="w-full text-left">
                 <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase text-[10px]">
                   <tr>
-                    <th className="py-2.5 px-3 w-6/12">Description / Service</th>
+                    <th className="py-2.5 px-3 w-5/12">Description / Service</th>
                     <th className="py-2.5 px-3 w-2/12">HSN/SAC</th>
                     <th className="py-2.5 px-3 w-1/12 text-center">Qty</th>
+                    <th className="py-2.5 px-3 w-1/12 text-center">Unit (UQC)</th>
                     <th className="py-2.5 px-3 w-2/12 text-right">Rate (₹)</th>
-                    <th className="py-2.5 px-3 w-2/12 text-right">Amount (₹)</th>
+                    <th className="py-2.5 px-3 w-1/12 text-right">Amount (₹)</th>
                     <th className="py-2.5 px-3 w-1/12 text-center"></th>
                   </tr>
                 </thead>
@@ -564,6 +657,24 @@ export const InvoiceCreatorModal: React.FC<InvoiceCreatorModalProps> = ({
                         />
                       </td>
                       <td className="p-2">
+                        <select
+                          value={item.uqc || 'NOS'}
+                          onChange={(e) => handleItemChange(idx, 'uqc', e.target.value)}
+                          className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 text-xs font-bold font-mono text-center"
+                        >
+                          <option value="NOS">NOS (Units)</option>
+                          <option value="KGS">KGS</option>
+                          <option value="MTR">MTR (Metres)</option>
+                          <option value="BOX">BOX</option>
+                          <option value="HRS">HRS (Hours)</option>
+                          <option value="DAYS">DAYS</option>
+                          <option value="TRIP">TRIP</option>
+                          <option value="MONTH">MONTH</option>
+                          <option value="QTL">QTL (Quintal)</option>
+                          <option value="BAG">BAG</option>
+                        </select>
+                      </td>
+                      <td className="p-2">
                         <input
                           type="number"
                           min="0"
@@ -581,7 +692,7 @@ export const InvoiceCreatorModal: React.FC<InvoiceCreatorModalProps> = ({
                           type="button"
                           onClick={() => removeItemRow(idx)}
                           disabled={items.length <= 1}
-                          className="text-slate-400 hover:text-rose-600 disabled:opacity-30 p-1"
+                          className="text-slate-400 hover:text-rose-600 disabled:opacity-30 p-1 cursor-pointer"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -701,13 +812,26 @@ export const InvoiceCreatorModal: React.FC<InvoiceCreatorModalProps> = ({
             {/* Calculations Breakdown Box */}
             <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2 font-mono">
               <div className="flex justify-between text-slate-600">
-                <span>Subtotal:</span>
+                <span>Taxable Amount (Subtotal):</span>
                 <span>₹{subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
               </div>
-              <div className="flex justify-between text-slate-600">
-                <span>GST ({taxRate}%):</span>
-                <span>+ ₹{taxAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-              </div>
+              {gstBreakdown.isInterState ? (
+                <div className="flex justify-between text-slate-600">
+                  <span>IGST ({gstBreakdown.igstRate}%):</span>
+                  <span>+ ₹{gstBreakdown.igstAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                </div>
+              ) : (
+                <>
+                  <div className="flex justify-between text-slate-600">
+                    <span>CGST ({gstBreakdown.cgstRate}%):</span>
+                    <span>+ ₹{gstBreakdown.cgstAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  <div className="flex justify-between text-slate-600">
+                    <span>SGST ({gstBreakdown.sgstRate}%):</span>
+                    <span>+ ₹{gstBreakdown.sgstAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                </>
+              )}
               {tdsAmount > 0 && (
                 <div className="flex justify-between text-rose-600">
                   <span>TDS ({tdsRate}%):</span>

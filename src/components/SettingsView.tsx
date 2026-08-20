@@ -22,6 +22,7 @@ import {
 import { IndustryType, SubscriptionPlan, UserProfile, InvoiceTemplate } from '../lib/types.ts';
 import { InvoiceRenderer } from './InvoiceRenderer.tsx';
 import { RazorpayCheckoutButton } from './RazorpayCheckoutButton.tsx';
+import { LegalComplianceModal } from './LegalComplianceModal.tsx';
 
 interface SettingsViewProps {
   profile: UserProfile | null;
@@ -46,6 +47,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ profile, onUpdatePro
   const [brandColor, setBrandColor] = useState(profile?.brandColor || '#4f46e5');
   const [customFooter, setCustomFooter] = useState(profile?.customFooter || '');
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [isLegalModalOpen, setIsLegalModalOpen] = useState(false);
+  const [legalTab, setLegalTab] = useState<'gst' | 'terms' | 'privacy' | 'payments'>('gst');
 
   // WhatsApp Direct API Gateway Config
   const [whatsappPhoneNumberId, setWhatsappPhoneNumberId] = useState(profile?.whatsappPhoneNumberId || '');
@@ -725,6 +728,76 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ profile, onUpdatePro
           </div>
         </div>
 
+        {/* ==================================================== */}
+        {/* SECTION 5: GOVERNMENT & LEGAL COMPLIANCE             */}
+        {/* ==================================================== */}
+        <div className="bg-gradient-to-br from-indigo-50/70 to-slate-50 dark:from-slate-900 dark:to-slate-800 p-5 sm:p-6 rounded-2xl border border-indigo-100 dark:border-slate-800 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-xs">
+                <ShieldCheck className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 className="text-sm font-bold text-slate-900 dark:text-white">Government Policy & Legal Compliance</h2>
+                <p className="text-xs text-slate-500 dark:text-slate-400">CGST Rule 46 • IT Act 2000 • DPDP Act 2023 • NPCI UPI Protocol</p>
+              </div>
+            </div>
+            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">
+              <CheckCircle2 className="w-3.5 h-3.5" /> 100% Tax Compliant
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+            <button
+              type="button"
+              onClick={() => {
+                setLegalTab('gst');
+                setIsLegalModalOpen(true);
+              }}
+              className="p-3 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 text-left hover:border-indigo-500 transition-colors cursor-pointer"
+            >
+              <span className="text-[10px] font-bold text-indigo-600 block uppercase">Tax Mandate</span>
+              <strong className="text-xs text-slate-900 dark:text-white block mt-0.5">GST Rule 46</strong>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setLegalTab('payments');
+                setIsLegalModalOpen(true);
+              }}
+              className="p-3 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 text-left hover:border-indigo-500 transition-colors cursor-pointer"
+            >
+              <span className="text-[10px] font-bold text-indigo-600 block uppercase">Payments</span>
+              <strong className="text-xs text-slate-900 dark:text-white block mt-0.5">NPCI & RBI Protocol</strong>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setLegalTab('privacy');
+                setIsLegalModalOpen(true);
+              }}
+              className="p-3 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 text-left hover:border-indigo-500 transition-colors cursor-pointer"
+            >
+              <span className="text-[10px] font-bold text-indigo-600 block uppercase">Data Privacy</span>
+              <strong className="text-xs text-slate-900 dark:text-white block mt-0.5">DPDP Act 2023</strong>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setLegalTab('terms');
+                setIsLegalModalOpen(true);
+              }}
+              className="p-3 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 text-left hover:border-indigo-500 transition-colors cursor-pointer"
+            >
+              <span className="text-[10px] font-bold text-indigo-600 block uppercase">SaaS Terms</span>
+              <strong className="text-xs text-slate-900 dark:text-white block mt-0.5">Terms of Service</strong>
+            </button>
+          </div>
+        </div>
+
         {/* Submit */}
         <div className="flex justify-end gap-3">
           <button
@@ -746,6 +819,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ profile, onUpdatePro
           </button>
         </div>
       </form>
+
+      {/* ==================================================== */}
+      {/* LEGAL & COMPLIANCE MODAL                             */}
+      {/* ==================================================== */}
+      <LegalComplianceModal
+        isOpen={isLegalModalOpen}
+        onClose={() => setIsLegalModalOpen(false)}
+        initialTab={legalTab}
+      />
 
       {/* ==================================================== */}
       {/* LIVE TEMPLATE PREVIEW MODAL                          */}

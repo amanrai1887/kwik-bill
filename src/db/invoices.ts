@@ -61,9 +61,13 @@ export async function getInvoiceById(userId: number, invoiceId: number) {
   }
 }
 
-export async function getInvoiceByNumberPublic(invoiceNumber: string) {
+import crypto from "crypto";
+import { or } from "drizzle-orm";
+
+export async function getInvoiceByNumberPublic(identifier: string) {
   try {
     const { users } = await import('./schema.ts');
+    // Support lookup by unique shareToken or invoiceNumber
     const rows = await db
       .select({
         invoice: invoices,
@@ -88,8 +92,7 @@ export async function getInvoiceByNumberPublic(invoiceNumber: string) {
       .from(invoices)
       .innerJoin(clients, eq(invoices.clientId, clients.id))
       .innerJoin(users, eq(invoices.userId, users.id))
-      .where(eq(invoices.invoiceNumber, invoiceNumber));
-
+      .where(or(eq(invoices.shareToken, identifier), eq(invoices.invoiceNumber, identifier)));
 
     if (rows.length === 0) return null;
 
@@ -103,7 +106,6 @@ export async function getInvoiceByNumberPublic(invoiceNumber: string) {
     throw new Error("Failed to fetch public invoice.", { cause: error });
   }
 }
-
 
 export async function createInvoice(userId: number, data: {
   clientId: number;
@@ -120,12 +122,17 @@ export async function createInvoice(userId: number, data: {
   discountAmount?: string;
   totalAmount: string;
   paidAmount?: string;
+  placeOfSupply?: string;
+  isRcm?: boolean;
+  taxType?: string;
+  shareToken?: string;
   items: any[];
   industryDetails?: any;
   notes?: string;
   terms?: string;
 }) {
   try {
+    const generatedShareToken = data.shareToken || `inv_live_${crypto.randomBytes(12).toString('hex')}`;
     const inserted = await db.insert(invoices).values({
       userId,
       clientId: data.clientId,
@@ -142,6 +149,11 @@ export async function createInvoice(userId: number, data: {
       discountAmount: data.discountAmount || '0.00',
       totalAmount: data.totalAmount,
       paidAmount: data.paidAmount || '0.00',
+      placeOfSupply: data.placeOfSupply || '',
+      isRcm: data.isRcm ?? false,
+      taxType: data.taxType || 'intra_state',
+      shareToken: generatedShareToken,
+      isCancelled: false,
       items: data.items,
       industryDetails: data.industryDetails || {},
       notes: data.notes || 'Thank you for your business! Please settle the dues promptly.',
@@ -191,14 +203,27 @@ export async function recordReminderSent(userId: number, invoiceId: number) {
   }
 }
 
-export async function deleteInvoice(userId: number, invoiceId: number) {
+/**
+ * GST Compliant Invoice Cancellation (CGST Section 31 & Rule 46)
+ * Invoices issued cannot be physically hard-deleted. They must be preserved as 'cancelled'
+ * in the taxpayer's Table 13 Document register for GST audit integrity.
+ */
+export async function deleteInvoice(userId: number, invoiceId: number, reason?: string) {
   try {
-    // Delete associated payments and reminder logs first
-    await db.delete(payments).where(and(eq(payments.invoiceId, invoiceId), eq(payments.userId, userId)));
-    await db.delete(reminderLogs).where(and(eq(reminderLogs.invoiceId, invoiceId), eq(reminderLogs.userId, userId)));
-    return await db.delete(invoices).where(and(eq(invoices.id, invoiceId), eq(invoices.userId, userId))).returning();
+    const updated = await db
+      .update(invoices)
+      .set({
+        status: 'cancelled',
+        isCancelled: true,
+        cancelReason: reason || 'Cancelled by user / voided invoice',
+        updatedAt: new Date(),
+      })
+      .where(and(eq(invoices.id, invoiceId), eq(invoices.userId, userId)))
+      .returning();
+
+    return updated[0];
   } catch (error) {
-    console.error("Failed to delete invoice:", error);
-    throw new Error("Failed to delete invoice.", { cause: error });
+    console.error("Failed to cancel invoice:", error);
+    throw new Error("Failed to cancel invoice.", { cause: error });
   }
 }

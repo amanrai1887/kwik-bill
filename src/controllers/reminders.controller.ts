@@ -17,10 +17,10 @@ export async function sendReminder(req: AuthRequest, res: Response) {
   try {
     const userId = req.dbUser.id;
     const dbUser = req.dbUser;
-    const { invoiceId, clientId, templateType, messageContent, recipientPhone, sendMethod, pdfUrl, sendAsDocument } = req.body;
+    const { invoiceId, clientId, templateType, templateName, recipientName, invoiceNumber, totalAmount, dueDate, messageContent, recipientPhone, sendMethod, pdfUrl, sendAsDocument } = req.body;
     
     // Clean phone number (format with 91 for Indian numbers if 10 digits)
-    let cleanPhone = recipientPhone.replace(/[^0-9]/g, '');
+    let cleanPhone = (recipientPhone || '').replace(/[^0-9]/g, '');
     if (cleanPhone.length === 10) {
       cleanPhone = `91${cleanPhone}`;
     }
@@ -44,7 +44,25 @@ export async function sendReminder(req: AuthRequest, res: Response) {
           to: cleanPhone,
         };
 
-        if (isDocument && pdfUrl) {
+        if (templateName || process.env.META_WHATSAPP_TEMPLATE) {
+          // Compliant Meta Utility Template message structure
+          messagePayload.type = 'template';
+          messagePayload.template = {
+            name: templateName || process.env.META_WHATSAPP_TEMPLATE || 'payment_reminder',
+            language: { code: 'en' },
+            components: [
+              {
+                type: 'body',
+                parameters: [
+                  { type: 'text', text: recipientName || 'Customer' },
+                  { type: 'text', text: invoiceNumber || String(invoiceId) },
+                  { type: 'text', text: totalAmount ? `₹${totalAmount}` : 'Pending Amount' },
+                  { type: 'text', text: dueDate || 'Due immediately' },
+                ],
+              },
+            ],
+          };
+        } else if (isDocument && pdfUrl) {
           messagePayload.type = 'document';
           messagePayload.document = {
             link: pdfUrl,

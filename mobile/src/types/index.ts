@@ -1,5 +1,6 @@
 export type IndustryType = 'transport' | 'agency' | 'freelancer' | 'consultant' | 'gym' | 'coaching' | 'retail' | 'general';
 export type SubscriptionPlan = 'trial_15_days' | 'starter_299' | 'pro_499';
+export type InvoiceTemplate = 'modern' | 'corporate' | 'logistics' | 'creative' | 'classic' | 'dark_neon';
 
 export interface UserProfile {
   id: number;
@@ -51,6 +52,7 @@ export interface InvoiceItem {
   description: string;
   hsnCode?: string;
   quantity: number;
+  uqc?: string;
   rate: number;
   gstRate?: number; // 0, 5, 12, 18, 28
   amount: number;
@@ -63,7 +65,7 @@ export interface Invoice {
   invoiceNumber: string;
   issueDate: string;
   dueDate: string;
-  status: 'draft' | 'sent' | 'partially_paid' | 'paid' | 'overdue';
+  status: 'draft' | 'sent' | 'partially_paid' | 'paid' | 'overdue' | 'cancelled';
   items: InvoiceItem[];
   subtotal: string;
   taxRate?: string;
@@ -77,6 +79,11 @@ export interface Invoice {
   totalAmount: string;
   paidAmount: string;
   balanceDue: string;
+  placeOfSupply?: string;
+  isRcm?: boolean;
+  taxType?: 'intra_state' | 'inter_state';
+  shareToken?: string;
+  isCancelled?: boolean;
   upiId?: string;
   qrCodeUrl?: string;
   notes?: string;

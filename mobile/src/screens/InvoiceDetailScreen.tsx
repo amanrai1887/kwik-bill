@@ -30,6 +30,11 @@ import { Invoice } from '../types/index.ts';
 import { UpiQrCode } from '../components/UpiQrCode.tsx';
 import { WhatsAppModal } from '../components/WhatsAppModal.tsx';
 import { PaymentModal } from '../components/PaymentModal.tsx';
+import { 
+  calculateGstBreakdown, 
+  getStateNameOrFormatted, 
+  STATUTORY_INVOICE_DISCLAIMER 
+} from '../utils/gstCompliance.ts';
 
 export const InvoiceDetailScreen: React.FC<{ route: any; navigation: any }> = ({
   route,
@@ -110,7 +115,14 @@ export const InvoiceDetailScreen: React.FC<{ route: any; navigation: any }> = ({
                 <ArrowLeft size={18} color="#ffffff" />
               </TouchableOpacity>
               <View>
-                <Text style={styles.heroSubText}>{t('tax_invoice_details', 'TAX INVOICE DETAILS')}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Text style={styles.heroSubText}>{t('tax_invoice_details', 'TAX INVOICE DETAILS')}</Text>
+                  <View style={{ backgroundColor: 'rgba(255,255,255,0.15)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                    <Text style={{ fontSize: 9, color: '#f8fafc', fontWeight: '800', textTransform: 'uppercase' }}>
+                      {user?.invoiceTemplate || 'modern'}
+                    </Text>
+                  </View>
+                </View>
                 <Text style={styles.heroTitle}>#{invoice.invoiceNumber}</Text>
               </View>
             </View>
@@ -166,7 +178,18 @@ export const InvoiceDetailScreen: React.FC<{ route: any; navigation: any }> = ({
           <Text style={styles.clientPhone}>Phone: {invoice.client?.phone || 'N/A'}</Text>
           {invoice.client?.gstin ? (
             <Text style={styles.clientGstin}>GSTIN: {invoice.client.gstin}</Text>
-          ) : null}
+          ) : (
+            <Text style={[styles.clientGstin, { color: '#94a3b8', fontStyle: 'italic' }]}>GSTIN: Unregistered Person (URP)</Text>
+          )}
+
+          <View style={{ marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#f1f5f9' }}>
+            <Text style={{ fontSize: 11, color: '#64748b' }}>
+              Place of Supply: <Text style={{ fontWeight: '700', color: '#0f172a' }}>{getStateNameOrFormatted(invoice.placeOfSupply || invoice.client?.gstin?.substring(0, 2))}</Text>
+            </Text>
+            <Text style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
+              Tax Payable on Reverse Charge (RCM): <Text style={{ fontWeight: '700', color: invoice.isRcm ? '#d97706' : '#0f172a' }}>{invoice.isRcm ? 'YES' : 'NO'}</Text>
+            </Text>
+          </View>
         </View>
 
         {/* Dynamic UPI Payment QR Card */}
@@ -177,7 +200,7 @@ export const InvoiceDetailScreen: React.FC<{ route: any; navigation: any }> = ({
             <UpiQrCode
               upiId={user.upiId}
               businessName={user.businessName}
-              amount={balance > 0 ? balance : invoice.totalAmount}
+              amount={balance > 0 ? balance : parseFloat(invoice.totalAmount)}
               invoiceNumber={invoice.invoiceNumber}
               size={180}
             />
@@ -263,22 +286,44 @@ export const InvoiceDetailScreen: React.FC<{ route: any; navigation: any }> = ({
 
           <View style={styles.divider} />
           <View style={styles.calcRow}>
-            <Text style={styles.calcLabel}>{t('subtotal', 'Subtotal')}</Text>
+            <Text style={styles.calcLabel}>{t('subtotal', 'Taxable Subtotal')}</Text>
             <Text style={styles.calcVal}>₹{parseFloat(invoice.subtotal).toLocaleString('en-IN')}</Text>
           </View>
-          {invoice.taxAmount && parseFloat(invoice.taxAmount) > 0 ? (
-            <View style={styles.calcRow}>
-              <Text style={styles.calcLabel}>{t('gst', 'GST')} ({invoice.taxRate || '18'}%)</Text>
-              <Text style={styles.calcVal}>+ ₹{parseFloat(invoice.taxAmount).toLocaleString('en-IN')}</Text>
-            </View>
-          ) : (
-            <View style={styles.calcRow}>
-              <Text style={styles.calcLabel}>CGST + SGST</Text>
-              <Text style={styles.calcVal}>
-                ₹{(parseFloat(invoice.cgst || '0') + parseFloat(invoice.sgst || '0')).toLocaleString('en-IN')}
-              </Text>
-            </View>
-          )}
+          
+          {(() => {
+            const taxRateNum = parseFloat(invoice.taxRate || '18') || 0;
+            const subtotalNum = parseFloat(invoice.subtotal) || 0;
+            const gstBreakdown = calculateGstBreakdown(
+              taxRateNum,
+              subtotalNum,
+              user?.gstin,
+              invoice.placeOfSupply || invoice.client?.gstin,
+              invoice.taxType === 'inter_state'
+            );
+
+            if (gstBreakdown.isInterState) {
+              return (
+                <View style={styles.calcRow}>
+                  <Text style={styles.calcLabel}>IGST ({gstBreakdown.igstRate}%)</Text>
+                  <Text style={styles.calcVal}>+ ₹{gstBreakdown.igstAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Text>
+                </View>
+              );
+            } else {
+              return (
+                <>
+                  <View style={styles.calcRow}>
+                    <Text style={styles.calcLabel}>CGST ({gstBreakdown.cgstRate}%)</Text>
+                    <Text style={styles.calcVal}>+ ₹{gstBreakdown.cgstAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Text>
+                  </View>
+                  <View style={styles.calcRow}>
+                    <Text style={styles.calcLabel}>SGST ({gstBreakdown.sgstRate}%)</Text>
+                    <Text style={styles.calcVal}>+ ₹{gstBreakdown.sgstAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Text>
+                  </View>
+                </>
+              );
+            }
+          })()}
+
           {invoice.tdsAmount && parseFloat(invoice.tdsAmount) > 0 ? (
             <View style={styles.calcRow}>
               <Text style={[styles.calcLabel, { color: '#e11d48' }]}>{t('tds_withholding', 'TDS Withholding')} ({invoice.tdsRate}%)</Text>
@@ -299,6 +344,16 @@ export const InvoiceDetailScreen: React.FC<{ route: any; navigation: any }> = ({
             <Text style={styles.grandLabel}>{t('grand_total', 'Grand Total')}</Text>
             <Text style={styles.grandVal}>₹{parseFloat(invoice.totalAmount).toLocaleString('en-IN')}</Text>
           </View>
+        </View>
+
+        {/* Statutory Legal Disclaimer Card */}
+        <View style={[styles.card, { backgroundColor: '#f8fafc', borderColor: '#e2e8f0' }]}>
+          <Text style={{ fontSize: 10, fontWeight: '700', color: '#64748b', textTransform: 'uppercase', marginBottom: 4 }}>
+            Statutory Legal Compliance
+          </Text>
+          <Text style={{ fontSize: 10, color: '#64748b', lineHeight: 14 }}>
+            {STATUTORY_INVOICE_DISCLAIMER}
+          </Text>
         </View>
 
         {/* Delete Invoice */}

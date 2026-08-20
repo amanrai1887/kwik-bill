@@ -18,6 +18,7 @@ import {
   ChevronRight
 } from 'lucide-react';
 import { InvoiceRenderer } from './InvoiceRenderer.tsx';
+import { generateLocalQrDataUrl } from '../lib/qrCode.ts';
 
 export const PublicInvoicePayView: React.FC<{ invoiceNumberFromProp?: string }> = ({ invoiceNumberFromProp }) => {
   const [invoiceNumber, setInvoiceNumber] = useState<string>(() => {
@@ -31,6 +32,7 @@ export const PublicInvoicePayView: React.FC<{ invoiceNumberFromProp?: string }> 
   const [error, setError] = useState('');
   const [copiedUpi, setCopiedUpi] = useState(false);
   const [copiedIfsc, setCopiedIfsc] = useState(false);
+  const [qrImageUrl, setQrImageUrl] = useState<string>('');
 
   useEffect(() => {
     if (!invoiceNumber) return;
@@ -53,6 +55,34 @@ export const PublicInvoicePayView: React.FC<{ invoiceNumberFromProp?: string }> 
 
     fetchPublicInvoice();
   }, [invoiceNumber]);
+
+  const isPaid = invoice ? invoice.status === 'paid' : false;
+  const total = invoice ? parseFloat(invoice.totalAmount || '0') : 0;
+  const paid = invoice ? parseFloat(invoice.paidAmount || '0') : 0;
+  const balanceDue = Math.max(0, total - paid);
+  const upiId = invoice?.merchant?.upiId || 'merchant@okhdfcbank';
+  const businessName = invoice?.merchant?.businessName || 'Merchant Billing';
+  const merchantPhone = invoice?.merchant?.phone || '';
+  const merchantGstin = invoice?.merchant?.gstin || '';
+  const bankAccount = invoice?.merchant?.bankAccountNo || '50200084729103';
+  const bankIfsc = invoice?.merchant?.bankIfsc || 'HDFC0001244';
+  const bankName = invoice?.merchant?.bankName || 'HDFC Bank';
+
+  const upiDeepLink = `upi://pay?pa=${upiId}&pn=${encodeURIComponent(businessName)}&am=${isPaid ? total : balanceDue}&cu=INR&tn=Invoice%20${invoice?.invoiceNumber || ''}`;
+
+  useEffect(() => {
+    if (invoice && upiDeepLink) {
+      let isMounted = true;
+      generateLocalQrDataUrl(upiDeepLink).then((url) => {
+        if (isMounted) {
+          setQrImageUrl(url);
+        }
+      });
+      return () => {
+        isMounted = false;
+      };
+    }
+  }, [invoice, upiDeepLink]);
 
   if (loading) {
     return (
@@ -84,21 +114,6 @@ export const PublicInvoicePayView: React.FC<{ invoiceNumberFromProp?: string }> 
       </div>
     );
   }
-
-  const isPaid = invoice.status === 'paid';
-  const total = parseFloat(invoice.totalAmount || '0');
-  const paid = parseFloat(invoice.paidAmount || '0');
-  const balanceDue = Math.max(0, total - paid);
-  const upiId = invoice.merchant?.upiId || 'merchant@okhdfcbank';
-  const businessName = invoice.merchant?.businessName || 'Merchant Billing';
-  const merchantPhone = invoice.merchant?.phone || '';
-  const merchantGstin = invoice.merchant?.gstin || '';
-  const bankAccount = invoice.merchant?.bankAccountNo || '50200084729103';
-  const bankIfsc = invoice.merchant?.bankIfsc || 'HDFC0001244';
-  const bankName = invoice.merchant?.bankName || 'HDFC Bank';
-
-  const upiDeepLink = `upi://pay?pa=${upiId}&pn=${encodeURIComponent(businessName)}&am=${isPaid ? total : balanceDue}&cu=INR&tn=Invoice%20${invoice.invoiceNumber}`;
-  const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(upiDeepLink)}`;
 
   const copyToClipboard = (text: string, type: 'upi' | 'ifsc') => {
     navigator.clipboard.writeText(text);

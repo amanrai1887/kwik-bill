@@ -82,8 +82,16 @@ export const invoices = pgTable('invoices', {
   totalAmount: numeric('total_amount', { precision: 12, scale: 2 }).notNull().default('0.00'),
   paidAmount: numeric('paid_amount', { precision: 12, scale: 2 }).default('0.00'),
 
+  // GST Compliance & Security Isolation
+  placeOfSupply: text('place_of_supply').default(''),
+  isRcm: boolean('is_rcm').default(false),
+  taxType: text('tax_type').default('intra_state'), // 'intra_state' | 'inter_state'
+  shareToken: text('share_token').default(''),
+  isCancelled: boolean('is_cancelled').default(false),
+  cancelReason: text('cancel_reason').default(''),
+
   // Itemized breakdown & industry custom fields (stored as structured JSON)
-  items: jsonb('items').notNull(), // Array<{ description: string, quantity: number, rate: number, amount: number, hsnCode?: string }>
+  items: jsonb('items').notNull(), // Array<{ description: string, quantity: number, uqc?: string, rate: number, gstRate?: number, amount: number, hsnCode?: string }>
   industryDetails: jsonb('industry_details').default({}), // e.g. Transport: { vehicleNo, lrNumber, routeFrom, routeTo }, Consultant: { sessionDates, hours }
 
   notes: text('notes').default('Thank you for your business! Please settle the dues promptly via UPI or bank transfer.'),

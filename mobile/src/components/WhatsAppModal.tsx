@@ -44,6 +44,7 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
   );
   const [isSending, setIsSending] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
   if (!invoice) return null;
 
@@ -140,8 +141,6 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
       setIsSending(false);
     }
   };
-
-  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
   const handleSharePdfDirectly = async () => {
     setIsGeneratingPdf(true);

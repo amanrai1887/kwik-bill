@@ -50,7 +50,9 @@ export interface InvoiceItem {
   id?: string;
   description: string;
   quantity: number;
+  uqc?: string; // Unit Quantity Code (e.g. NOS, KGS, MTR, BOX, HRS, DAYS, TRIP, MONTH)
   rate: number;
+  gstRate?: number; // Optional line-item specific GST %
   amount: number;
   hsnCode?: string;
 }
@@ -112,7 +114,7 @@ export interface Invoice {
   invoiceNumber: string;
   issueDate: string;
   dueDate: string;
-  status: InvoiceStatus;
+  status: InvoiceStatus | 'cancelled';
   currency: string;
   subtotal: string;
   taxRate: string;
@@ -122,6 +124,12 @@ export interface Invoice {
   discountAmount: string;
   totalAmount: string;
   paidAmount: string;
+  placeOfSupply?: string;
+  isRcm?: boolean;
+  taxType?: 'intra_state' | 'inter_state';
+  shareToken?: string;
+  isCancelled?: boolean;
+  cancelReason?: string;
   items: InvoiceItem[];
   industryDetails?: TransportDetails | AgencyDetails | FreelanceDetails | ConsultantDetails | any;
   notes: string;
@@ -131,6 +139,7 @@ export interface Invoice {
   createdAt?: string;
   updatedAt?: string;
   client?: Client;
+  merchant?: UserProfile;
   payments?: Payment[];
   reminderLogs?: ReminderLog[];
 }
