@@ -21,23 +21,20 @@ app.use((req, res, next) => {
 
 app.use(express.json());
 
-let isDbInitialized = false;
-
-// Ensure database tables are initialized once on serverless cold-start
-app.use(async (req, res, next) => {
-  if (!isDbInitialized) {
-    try {
-      await initializeDatabase();
-      isDbInitialized = true;
-    } catch (err) {
-      console.error("[Vercel API] DB init error:", err);
-    }
-  }
-  next();
-});
-
 // Mount router on both /api and root / so all rewrites resolve properly
 app.use("/api", apiRouter);
 app.use("/", apiRouter);
 
-export default app;
+// Root fallback / error handler
+app.use((err: any, req: any, res: any, next: any) => {
+  console.error("[Vercel API Error]:", err);
+  res.status(err.status || 500).json({
+    success: false,
+    error: err.message || "Internal Server Error",
+  });
+});
+
+export default function handler(req: any, res: any) {
+  return app(req, res);
+}
+
