@@ -328,7 +328,7 @@ var db = drizzle(pool, { schema: schema_exports });
 
 // src/db/users.ts
 init_schema();
-import { eq } from "drizzle-orm";
+import { eq as eq2 } from "drizzle-orm";
 
 // src/config/app.config.ts
 import * as dotenv2 from "dotenv";
@@ -355,21 +355,231 @@ var config3 = {
     projectId: process.env.FIREBASE_PROJECT_ID || "invoice-saas-app-fc503"
   },
   // Security / Demo Mode
-  allowDemoAuth: process.env.NODE_ENV !== "production" && process.env.ALLOW_DEMO_AUTH === "true"
+  allowDemoAuth: process.env.ALLOW_DEMO_AUTH !== "false"
 };
 function isSuperAdminEmail(email) {
   if (!email) return false;
   return config3.superAdminEmails.includes(email.trim().toLowerCase());
 }
 
+// src/db/demoSeed.ts
+init_schema();
+import { eq } from "drizzle-orm";
+async function ensureDemoData(demoUserId) {
+  try {
+    const existingClients = await db.select().from(clients).where(eq(clients.userId, demoUserId));
+    if (existingClients.length > 0) {
+      return;
+    }
+    console.log("[Demo Seed] Seeding rich sample data for demo workspace...");
+    const insertedClients = await db.insert(clients).values([
+      {
+        userId: demoUserId,
+        name: "Rajesh Sharma",
+        companyName: "Rajesh Logistics & Supply Corp",
+        phone: "+919820098200",
+        email: "rajesh@rajeshlogistics.com",
+        address: "Plot 48, GIDC Industrial Estate, Sanand, Ahmedabad, Gujarat 382110",
+        gstin: "24AABCS1429B1ZX",
+        industryType: "transport",
+        paymentTermDays: 7,
+        notes: "Regular transport client for Mumbai-Gujarat corridor."
+      },
+      {
+        userId: demoUserId,
+        name: "Amit Patel",
+        companyName: "Patel Steel & Trading Ltd",
+        phone: "+919820198201",
+        email: "accounts@patelsteel.in",
+        address: "Steel Market, Kalamboli, Navi Mumbai, Maharashtra 410218",
+        gstin: "27AABCP1122C1Z4",
+        industryType: "transport",
+        paymentTermDays: 14,
+        notes: "Heavy coil & structural steel freight contract."
+      },
+      {
+        userId: demoUserId,
+        name: "Vikram Singh",
+        companyName: "Singhania Retail Distribution",
+        phone: "+919820298202",
+        email: "billing@singhaniaretail.com",
+        address: "Kirti Nagar Warehousing Hub, New Delhi 110015",
+        gstin: "07AABCS9988D1Z9",
+        industryType: "transport",
+        paymentTermDays: 7,
+        notes: "E-commerce FMCG line-haul routes."
+      },
+      {
+        userId: demoUserId,
+        name: "Pooja Verma",
+        companyName: "Pooja FMCG Traders",
+        phone: "+919820398203",
+        email: "pooja@poojatraders.in",
+        address: "Yeshwanthpur Industrial Area, Bengaluru, Karnataka 560022",
+        gstin: "29AABCP3344E1Z2",
+        industryType: "transport",
+        paymentTermDays: 10,
+        notes: "Interstate cold-chain delivery."
+      }
+    ]).returning();
+    const c1 = insertedClients[0];
+    const c2 = insertedClients[1];
+    const c3 = insertedClients[2];
+    const c4 = insertedClients[3];
+    const today = /* @__PURE__ */ new Date();
+    const dateStr = (d) => d.toISOString().split("T")[0];
+    const pastDate1 = new Date(today.getTime() - 12 * 864e5);
+    const pastDate2 = new Date(today.getTime() - 5 * 864e5);
+    const pastDate3 = new Date(today.getTime() - 20 * 864e5);
+    const futureDate = new Date(today.getTime() + 7 * 864e5);
+    const insertedInvoices = await db.insert(invoices).values([
+      {
+        userId: demoUserId,
+        clientId: c1.id,
+        invoiceNumber: "INV-2026-001",
+        issueDate: dateStr(pastDate1),
+        dueDate: dateStr(pastDate2),
+        status: "paid",
+        currency: "INR",
+        subtotal: "36000.00",
+        taxRate: "18.00",
+        taxAmount: "6480.00",
+        totalAmount: "42480.00",
+        paidAmount: "42480.00",
+        taxType: "inter_state",
+        placeOfSupply: "24 - Gujarat",
+        items: [
+          { description: "Freight Corridors: Mumbai to Ahmedabad (Trailer 32ft)", hsnCode: "9965", quantity: 1, rate: 3e4, amount: 3e4 },
+          { description: "Loading, Unloading & Transit Toll Handling", hsnCode: "9967", quantity: 1, rate: 6e3, amount: 6e3 }
+        ],
+        industryDetails: {
+          vehicleNo: "MH-04-GP-8842",
+          lrNumber: "LR-994201",
+          routeFrom: "JNPT Port Mumbai",
+          routeTo: "Sanand Industrial Estate, Gujarat"
+        },
+        notes: "Payment received in full via UPI. Thank you for your business!"
+      },
+      {
+        userId: demoUserId,
+        clientId: c2.id,
+        invoiceNumber: "INV-2026-002",
+        issueDate: dateStr(pastDate2),
+        dueDate: dateStr(futureDate),
+        status: "pending",
+        currency: "INR",
+        subtotal: "30000.00",
+        taxRate: "18.00",
+        taxAmount: "5400.00",
+        totalAmount: "35400.00",
+        paidAmount: "0.00",
+        taxType: "intra_state",
+        placeOfSupply: "27 - Maharashtra",
+        items: [
+          { description: "Heavy Steel Plate Transportation: Kalamboli to Pune", hsnCode: "9965", quantity: 1, rate: 3e4, amount: 3e4 }
+        ],
+        industryDetails: {
+          vehicleNo: "MH-46-AR-1199",
+          lrNumber: "LR-994202",
+          routeFrom: "Kalamboli Steel Market",
+          routeTo: "Chakan MIDC Phase 2, Pune"
+        },
+        notes: "Please settle within stipulated credit period."
+      },
+      {
+        userId: demoUserId,
+        clientId: c3.id,
+        invoiceNumber: "INV-2026-003",
+        issueDate: dateStr(pastDate3),
+        dueDate: dateStr(pastDate1),
+        status: "overdue",
+        currency: "INR",
+        subtotal: "60000.00",
+        taxRate: "18.00",
+        taxAmount: "10800.00",
+        totalAmount: "70800.00",
+        paidAmount: "0.00",
+        taxType: "inter_state",
+        placeOfSupply: "07 - Delhi",
+        reminderSentCount: 2,
+        lastReminderSentAt: pastDate2,
+        items: [
+          { description: "Multi-Axle Container Dispatch: Mumbai to Delhi", hsnCode: "9965", quantity: 2, rate: 3e4, amount: 6e4 }
+        ],
+        industryDetails: {
+          vehicleNo: "NL-01-AB-4455",
+          lrNumber: "LR-994190",
+          routeFrom: "Bhiwandi Hub",
+          routeTo: "Kirti Nagar Warehouse Delhi"
+        },
+        notes: "Overdue invoice. Kindly clear immediately."
+      },
+      {
+        userId: demoUserId,
+        clientId: c4.id,
+        invoiceNumber: "INV-2026-004",
+        issueDate: dateStr(today),
+        dueDate: dateStr(futureDate),
+        status: "pending",
+        currency: "INR",
+        subtotal: "16000.00",
+        taxRate: "18.00",
+        taxAmount: "2880.00",
+        totalAmount: "18880.00",
+        paidAmount: "0.00",
+        taxType: "inter_state",
+        placeOfSupply: "29 - Karnataka",
+        items: [
+          { description: "Refrigerated Cargo Transport: Pune to Bengaluru", hsnCode: "9965", quantity: 1, rate: 16e3, amount: 16e3 }
+        ],
+        industryDetails: {
+          vehicleNo: "KA-01-MJ-9920",
+          lrNumber: "LR-994210",
+          routeFrom: "Pune Cold Storage",
+          routeTo: "Yeshwanthpur, Bengaluru"
+        }
+      }
+    ]).returning();
+    await db.insert(payments).values({
+      userId: demoUserId,
+      invoiceId: insertedInvoices[0].id,
+      amount: "42480.00",
+      paymentDate: dateStr(pastDate2),
+      paymentMethod: "upi",
+      referenceNumber: "UPI-9948201994",
+      notes: "Settled via GooglePay UPI QR Code"
+    });
+    await db.insert(reminderLogs).values([
+      {
+        userId: demoUserId,
+        invoiceId: insertedInvoices[2].id,
+        clientId: c3.id,
+        channel: "whatsapp",
+        templateType: "overdue",
+        recipientPhone: c3.phone,
+        messageContent: `Namaste Vikram Singh, reminder for overdue invoice INV-2026-003 of Rs. 70,800.00 for Singhania Retail Distribution. Pay via UPI: speedytrans@okaxis`,
+        status: "sent",
+        sentAt: pastDate2
+      }
+    ]);
+    console.log("[Demo Seed] Demo data seeded successfully.");
+  } catch (error) {
+    console.error("[Demo Seed] Error seeding demo data:", error);
+  }
+}
+
 // src/db/users.ts
 async function getOrCreateUser(uid, email, businessName) {
   try {
-    const existing = await db.select().from(users).where(eq(users.uid, uid));
+    const existing = await db.select().from(users).where(eq2(users.uid, uid));
     if (existing.length > 0) {
+      if (uid === "demo-business-owner-101") {
+        await ensureDemoData(existing[0].id);
+      }
       return existing[0];
     }
     const isAdmin = isSuperAdminEmail(email);
+    const isDemoUser = uid === "demo-business-owner-101";
     const role = isAdmin ? "superadmin" : "subscriber";
     const trialDays = 15;
     const trialEndsAt = new Date(Date.now() + trialDays * 24 * 60 * 60 * 1e3);
@@ -377,15 +587,15 @@ async function getOrCreateUser(uid, email, businessName) {
       uid,
       email,
       role,
-      businessName: businessName || (isAdmin ? "Platform SuperAdmin" : "My Business"),
-      upiId: "",
-      phone: "",
-      gstin: "",
-      address: "",
+      businessName: businessName || (isAdmin ? "Platform SuperAdmin" : isDemoUser ? "Speedy Transport Logistics" : "My Business"),
+      upiId: isDemoUser ? "speedytrans@okaxis" : "",
+      phone: isDemoUser ? "+91 98200 12345" : "",
+      gstin: isDemoUser ? "27AABCS1429B1ZX" : "",
+      address: isDemoUser ? "Plot 42, Transport Nagar, JNPT Highway, Navi Mumbai, MH 400705" : "",
       industryType: "transport",
-      subscriptionPlan: isAdmin ? "pro_499" : "trial_15_days",
-      subscriptionStatus: isAdmin ? "active" : "trial",
-      trialEndsAt: isAdmin ? null : trialEndsAt
+      subscriptionPlan: isAdmin || isDemoUser ? "pro_499" : "trial_15_days",
+      subscriptionStatus: isAdmin || isDemoUser ? "active" : "trial",
+      trialEndsAt: isAdmin || isDemoUser ? null : trialEndsAt
     }).onConflictDoUpdate({
       target: users.uid,
       set: {
@@ -394,7 +604,11 @@ async function getOrCreateUser(uid, email, businessName) {
         updatedAt: /* @__PURE__ */ new Date()
       }
     }).returning();
-    return result[0];
+    const created = result[0];
+    if (isDemoUser && created) {
+      await ensureDemoData(created.id);
+    }
+    return created;
   } catch (error) {
     console.error("Database user query failed:", error);
     throw new Error("Database query failed. Please try again later.", { cause: error });
@@ -411,7 +625,7 @@ async function updateUserProfile(userId, data) {
     const updated = await db.update(users).set({
       ...updatePayload,
       updatedAt: /* @__PURE__ */ new Date()
-    }).where(eq(users.id, userId)).returning();
+    }).where(eq2(users.id, userId)).returning();
     return updated[0];
   } catch (error) {
     console.error("Database update user failed:", error);
@@ -433,7 +647,7 @@ async function updateTenantSubscription(userId, plan, status) {
       subscriptionPlan: plan,
       subscriptionStatus: status,
       updatedAt: /* @__PURE__ */ new Date()
-    }).where(eq(users.id, userId)).returning();
+    }).where(eq2(users.id, userId)).returning();
     return updated[0];
   } catch (error) {
     console.error("Database update tenant subscription failed:", error);
@@ -443,7 +657,7 @@ async function updateTenantSubscription(userId, plan, status) {
 
 // src/controllers/user.controller.ts
 init_schema();
-import { eq as eq2 } from "drizzle-orm";
+import { eq as eq3 } from "drizzle-orm";
 
 // src/utils/apiResponse.ts
 var ApiError = class extends Error {
@@ -545,11 +759,11 @@ var putUserProfile = asyncHandler(async (req, res) => {
 var resetUserData = asyncHandler(async (req, res) => {
   const userId = req.dbUser.id;
   await db.transaction(async (tx) => {
-    await tx.delete(reminderLogs).where(eq2(reminderLogs.userId, userId));
-    await tx.delete(payments).where(eq2(payments.userId, userId));
-    await tx.delete(recurringProfiles).where(eq2(recurringProfiles.userId, userId));
-    await tx.delete(invoices).where(eq2(invoices.userId, userId));
-    await tx.delete(clients).where(eq2(clients.userId, userId));
+    await tx.delete(reminderLogs).where(eq3(reminderLogs.userId, userId));
+    await tx.delete(payments).where(eq3(payments.userId, userId));
+    await tx.delete(recurringProfiles).where(eq3(recurringProfiles.userId, userId));
+    await tx.delete(invoices).where(eq3(invoices.userId, userId));
+    await tx.delete(clients).where(eq3(clients.userId, userId));
   });
   return ApiResponse.success(res, { message: "Workspace successfully reset to a clean slate." });
 });
@@ -559,7 +773,7 @@ init_schema();
 
 // src/db/planRequests.ts
 init_schema();
-import { eq as eq3, desc } from "drizzle-orm";
+import { eq as eq4, desc } from "drizzle-orm";
 async function createPlanRequest(userId, data) {
   const [created] = await db.insert(planRequests).values({
     userId,
@@ -578,8 +792,120 @@ async function getAllPlanRequests() {
   return await db.select().from(planRequests).orderBy(desc(planRequests.createdAt));
 }
 async function updatePlanRequestStatus(id, status) {
-  const [updated] = await db.update(planRequests).set({ status }).where(eq3(planRequests.id, id)).returning();
+  const [updated] = await db.update(planRequests).set({ status }).where(eq4(planRequests.id, id)).returning();
   return updated;
+}
+
+// src/services/email.service.ts
+import nodemailer from "nodemailer";
+var transporter = null;
+function getEmailTransporter() {
+  if (transporter) return transporter;
+  const smtpHost = process.env.SMTP_HOST || process.env.EMAIL_HOST;
+  const smtpPort = Number(process.env.SMTP_PORT || process.env.EMAIL_PORT) || 587;
+  const smtpUser = process.env.SMTP_USER || process.env.EMAIL_USER || process.env.GMAIL_USER;
+  const smtpPass = process.env.SMTP_PASS || process.env.EMAIL_PASS || process.env.GMAIL_PASS || process.env.GMAIL_APP_PASSWORD;
+  if (smtpHost && smtpUser && smtpPass) {
+    transporter = nodemailer.createTransport({
+      host: smtpHost,
+      port: smtpPort,
+      secure: smtpPort === 465,
+      auth: {
+        user: smtpUser,
+        pass: smtpPass
+      }
+    });
+    return transporter;
+  }
+  if (smtpUser && smtpPass && (smtpUser.includes("@gmail.com") || process.env.EMAIL_SERVICE === "gmail")) {
+    transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: smtpUser,
+        pass: smtpPass
+      }
+    });
+    return transporter;
+  }
+  return null;
+}
+async function sendAdminPlanRequestNotification(data) {
+  const adminEmail = config3.superAdminEmails[0] || "arai.343531@gmail.com";
+  const planLabel = data.requestedPlan === "pro_499" ? "Pro Growth Plan (\u20B9499/mo)" : data.requestedPlan === "starter_299" ? "Starter Plan (\u20B9299/mo)" : "15-Day Free Trial (\u20B90)";
+  const subject = `\u{1F514} [Kwik-Bill] New Subscription Request: ${data.businessName} (${planLabel})`;
+  const htmlContent = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; rounded: 12px; background-color: #ffffff;">
+      <div style="background-color: #4f46e5; color: #ffffff; padding: 16px 20px; border-radius: 8px; margin-bottom: 20px;">
+        <h2 style="margin: 0; font-size: 20px;">New Subscription & Onboarding Request</h2>
+        <p style="margin: 4px 0 0 0; font-size: 13px; opacity: 0.9;">Kwik-Bill SaaS Management Console</p>
+      </div>
+
+      <p style="font-size: 14px; color: #334155; line-height: 1.5;">
+        A new company has requested to subscribe to <strong>${planLabel}</strong>. Below are their requirement details:
+      </p>
+
+      <table style="width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 13px;">
+        <tr style="border-bottom: 1px solid #f1f5f9;">
+          <td style="padding: 10px 0; font-weight: bold; color: #64748b; width: 40%;">Company / Trade Name:</td>
+          <td style="padding: 10px 0; color: #0f172a; font-weight: bold;">${data.businessName}</td>
+        </tr>
+        <tr style="border-bottom: 1px solid #f1f5f9;">
+          <td style="padding: 10px 0; font-weight: bold; color: #64748b;">Contact Person:</td>
+          <td style="padding: 10px 0; color: #0f172a;">${data.contactPerson}</td>
+        </tr>
+        <tr style="border-bottom: 1px solid #f1f5f9;">
+          <td style="padding: 10px 0; font-weight: bold; color: #64748b;">WhatsApp Mobile:</td>
+          <td style="padding: 10px 0; color: #0f172a; font-family: monospace; font-weight: bold;">${data.phone}</td>
+        </tr>
+        <tr style="border-bottom: 1px solid #f1f5f9;">
+          <td style="padding: 10px 0; font-weight: bold; color: #64748b;">Email Address:</td>
+          <td style="padding: 10px 0; color: #0f172a;">${data.email}</td>
+        </tr>
+        <tr style="border-bottom: 1px solid #f1f5f9;">
+          <td style="padding: 10px 0; font-weight: bold; color: #64748b;">Industry Segment:</td>
+          <td style="padding: 10px 0; color: #0f172a; text-transform: capitalize;">${data.industryType}</td>
+        </tr>
+        <tr style="border-bottom: 1px solid #f1f5f9;">
+          <td style="padding: 10px 0; font-weight: bold; color: #64748b;">Requested Plan:</td>
+          <td style="padding: 10px 0; color: #4f46e5; font-weight: bold;">${planLabel}</td>
+        </tr>
+        ${data.businessNeeds ? `<tr>
+                <td style="padding: 10px 0; font-weight: bold; color: #64748b; vertical-align: top;">Business Needs:</td>
+                <td style="padding: 10px 0; color: #0f172a; background: #f8fafc; padding: 10px; border-radius: 6px;">${data.businessNeeds}</td>
+              </tr>` : ""}
+      </table>
+
+      <div style="background-color: #f8fafc; border-left: 4px solid #4f46e5; padding: 12px 16px; margin: 20px 0; font-size: 13px; color: #334155;">
+        <strong>Next Steps:</strong> Log in to your SuperAdmin Master Console to review, provision, or approve this company's subscription.
+      </div>
+
+      <div style="font-size: 11px; color: #94a3b8; text-align: center; border-top: 1px solid #f1f5f9; padding-top: 16px; margin-top: 24px;">
+        Kwik-Bill SaaS \u2022 Automated Lead & Subscription Notification Engine
+      </div>
+    </div>
+  `;
+  const mailTransporter = getEmailTransporter();
+  if (mailTransporter) {
+    try {
+      const fromAddress = process.env.EMAIL_FROM || process.env.SMTP_FROM || `"Kwik-Bill Subscriptions" <${process.env.SMTP_USER || "notifications@kwikbill.com"}>`;
+      await mailTransporter.sendMail({
+        from: fromAddress,
+        to: adminEmail,
+        subject,
+        html: htmlContent
+      });
+      console.log(`[Email Service] Subscription request notification successfully sent to Admin (${adminEmail})`);
+      return true;
+    } catch (err) {
+      console.error("[Email Service] Failed to send email via SMTP:", err);
+    }
+  } else {
+    console.log(`[Email Service - Notification Logged]`);
+    console.log(`To: ${adminEmail}`);
+    console.log(`Subject: ${subject}`);
+    console.log(`Company: ${data.businessName} | Contact: ${data.contactPerson} | Phone: ${data.phone} | Plan: ${data.requestedPlan}`);
+  }
+  return false;
 }
 
 // src/controllers/admin.controller.ts
@@ -630,6 +956,16 @@ var submitPlanRequest = asyncHandler(async (req, res) => {
     requestedPlan,
     businessNeeds
   });
+  sendAdminPlanRequestNotification({
+    businessName,
+    contactPerson,
+    email: email || req.dbUser.email,
+    phone,
+    industryType: industryType || "general",
+    requestedPlan,
+    businessNeeds,
+    userId
+  }).catch((err) => console.error("[Admin Notification Error]:", err));
   return ApiResponse.success(res, { request: created }, 201, "Plan request submitted successfully");
 });
 var getPlanRequestsList = asyncHandler(async (req, res) => {
@@ -664,45 +1000,105 @@ var adminAuth = getAuth();
 var requireAuth = async (req, res, next) => {
   const authHeader = req.headers.authorization;
   const isDevOrDemo = config3.allowDemoAuth;
+  let dbUser = null;
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
     if (isDevOrDemo) {
       const demoUid = "demo-business-owner-101";
       const demoEmail = "owner@speedytrans.in";
       try {
-        const dbUser = await getOrCreateUser(demoUid, demoEmail, "Speedy Transport & Logistics");
+        dbUser = await getOrCreateUser(demoUid, demoEmail, "Speedy Transport & Logistics");
         req.user = { uid: demoUid, email: demoEmail, name: "Speedy Transport Logistics" };
         req.dbUser = dbUser;
-        return next();
       } catch (err) {
         console.error("Error creating/fetching fallback user:", err);
         return res.status(500).json({ success: false, error: { code: "SESSION_INIT_ERROR", message: "Database session initialization error" } });
       }
+    } else {
+      return res.status(401).json({ success: false, error: { code: "UNAUTHORIZED", message: "Unauthorized: Missing or invalid Authorization header." } });
     }
-    return res.status(401).json({ success: false, error: { code: "UNAUTHORIZED", message: "Unauthorized: Missing or invalid Authorization header." } });
-  }
-  const token = authHeader.split("Bearer ")[1];
-  try {
-    const decodedToken = await adminAuth.verifyIdToken(token);
-    const dbUser = await getOrCreateUser(
-      decodedToken.uid,
-      decodedToken.email || "user@example.com",
-      decodedToken.name || "My Business"
-    );
-    req.user = decodedToken;
-    req.dbUser = dbUser;
-    next();
-  } catch (error) {
-    console.error("Error verifying Firebase ID token:", error);
-    if (isDevOrDemo) {
-      const demoUid = "demo-business-owner-101";
-      const demoEmail = "owner@speedytrans.in";
-      const dbUser = await getOrCreateUser(demoUid, demoEmail, "Speedy Transport & Logistics");
-      req.user = { uid: demoUid, email: demoEmail, name: "Speedy Transport Logistics" };
+  } else {
+    const token = authHeader.split("Bearer ")[1];
+    try {
+      const decodedToken = await adminAuth.verifyIdToken(token);
+      dbUser = await getOrCreateUser(
+        decodedToken.uid,
+        decodedToken.email || "user@example.com",
+        decodedToken.name || "My Business"
+      );
+      req.user = decodedToken;
       req.dbUser = dbUser;
-      return next();
+    } catch (error) {
+      console.error("Error verifying Firebase ID token:", error);
+      if (isDevOrDemo) {
+        const demoUid = "demo-business-owner-101";
+        const demoEmail = "owner@speedytrans.in";
+        dbUser = await getOrCreateUser(demoUid, demoEmail, "Speedy Transport & Logistics");
+        req.user = { uid: demoUid, email: demoEmail, name: "Speedy Transport Logistics" };
+        req.dbUser = dbUser;
+      } else {
+        return res.status(401).json({ success: false, error: { code: "INVALID_TOKEN", message: "Unauthorized: Invalid or expired authentication token." } });
+      }
     }
-    return res.status(401).json({ success: false, error: { code: "INVALID_TOKEN", message: "Unauthorized: Invalid or expired authentication token." } });
   }
+  if (req.dbUser?.uid === "demo-business-owner-101") {
+    const isWriteMethod = ["POST", "PUT", "PATCH", "DELETE"].includes(req.method);
+    if (isWriteMethod) {
+      const url = req.originalUrl || req.url || "";
+      const isPlanRequest = req.method === "POST" && url.includes("/plan-request");
+      if (!isPlanRequest) {
+        return res.status(403).json({
+          success: false,
+          error: {
+            code: "DEMO_READ_ONLY",
+            message: "You are viewing the demo workspace in read-only mode. Please sign in or create an account to create, edit, or delete data."
+          }
+        });
+      }
+    }
+  }
+  const isSuspendedAccount = req.dbUser && ["suspended", "inactive", "cancelled"].includes(req.dbUser.subscriptionStatus);
+  if (isSuspendedAccount) {
+    const isSuperAdmin = req.dbUser.role === "superadmin" || isSuperAdminEmail(req.dbUser.email);
+    if (!isSuperAdmin) {
+      const url = req.originalUrl || req.url || "";
+      const isProfileGet = req.method === "GET" && url.includes("/profile");
+      const isPlanRequest = req.method === "POST" && url.includes("/plan-request");
+      if (!isProfileGet && !isPlanRequest) {
+        return res.status(403).json({
+          success: false,
+          error: {
+            code: "ACCOUNT_SUSPENDED",
+            message: "Your account has been suspended by the platform administrator. Please contact support."
+          }
+        });
+      }
+    }
+  }
+  if (req.dbUser) {
+    const isSuperAdmin = req.dbUser.role === "superadmin" || isSuperAdminEmail(req.dbUser.email);
+    if (!isSuperAdmin && req.dbUser.subscriptionStatus !== "active") {
+      const isTrial = req.dbUser.subscriptionStatus === "trial" || req.dbUser.subscriptionPlan === "trial_15_days";
+      const isTrialEnded = Boolean(
+        isTrial && req.dbUser.trialEndsAt && new Date(req.dbUser.trialEndsAt).getTime() <= Date.now()
+      );
+      const isStatusExpired = req.dbUser.subscriptionStatus === "expired";
+      if (isTrialEnded || isStatusExpired) {
+        const url = req.originalUrl || req.url || "";
+        const isProfileGet = req.method === "GET" && url.includes("/profile");
+        const isPlanRequest = req.method === "POST" && url.includes("/plan-request");
+        if (!isProfileGet && !isPlanRequest) {
+          return res.status(403).json({
+            success: false,
+            error: {
+              code: "TRIAL_EXPIRED",
+              message: "Your 15-day free trial has expired. Please upgrade to a paid plan to continue."
+            }
+          });
+        }
+      }
+    }
+  }
+  next();
 };
 
 // src/routes/user.routes.ts
@@ -719,10 +1115,10 @@ import { Router as Router2 } from "express";
 
 // src/db/clients.ts
 init_schema();
-import { eq as eq4, and, desc as desc2, inArray } from "drizzle-orm";
+import { eq as eq5, and, desc as desc2, inArray } from "drizzle-orm";
 async function getClientsByUserId(userId) {
   try {
-    return await db.select().from(clients).where(eq4(clients.userId, userId)).orderBy(desc2(clients.createdAt));
+    return await db.select().from(clients).where(eq5(clients.userId, userId)).orderBy(desc2(clients.createdAt));
   } catch (error) {
     console.error("Failed to fetch clients:", error);
     throw new Error("Failed to fetch clients.", { cause: error });
@@ -751,7 +1147,7 @@ async function createClient(userId, clientData) {
 }
 async function updateClient(userId, clientId, clientData) {
   try {
-    const updated = await db.update(clients).set(clientData).where(and(eq4(clients.id, clientId), eq4(clients.userId, userId))).returning();
+    const updated = await db.update(clients).set(clientData).where(and(eq5(clients.id, clientId), eq5(clients.userId, userId))).returning();
     return updated[0];
   } catch (error) {
     console.error("Failed to update client:", error);
@@ -761,15 +1157,15 @@ async function updateClient(userId, clientId, clientData) {
 async function toggleClientActive(userId, clientId, isActive) {
   try {
     if (typeof isActive === "boolean") {
-      const updated = await db.update(clients).set({ isActive }).where(and(eq4(clients.id, clientId), eq4(clients.userId, userId))).returning();
+      const updated = await db.update(clients).set({ isActive }).where(and(eq5(clients.id, clientId), eq5(clients.userId, userId))).returning();
       return updated[0];
     } else {
-      const existing = await db.select().from(clients).where(and(eq4(clients.id, clientId), eq4(clients.userId, userId)));
+      const existing = await db.select().from(clients).where(and(eq5(clients.id, clientId), eq5(clients.userId, userId)));
       if (!existing || existing.length === 0) {
         throw new Error("Client not found");
       }
       const newStatus = !existing[0].isActive;
-      const updated = await db.update(clients).set({ isActive: newStatus }).where(and(eq4(clients.id, clientId), eq4(clients.userId, userId))).returning();
+      const updated = await db.update(clients).set({ isActive: newStatus }).where(and(eq5(clients.id, clientId), eq5(clients.userId, userId))).returning();
       return updated[0];
     }
   } catch (error) {
@@ -780,17 +1176,17 @@ async function toggleClientActive(userId, clientId, isActive) {
 async function deleteClient(userId, clientId) {
   try {
     return await db.transaction(async (tx) => {
-      const clientInvoices = await tx.select({ id: invoices.id }).from(invoices).where(and(eq4(invoices.clientId, clientId), eq4(invoices.userId, userId)));
+      const clientInvoices = await tx.select({ id: invoices.id }).from(invoices).where(and(eq5(invoices.clientId, clientId), eq5(invoices.userId, userId)));
       const invoiceIds = clientInvoices.map((inv) => inv.id);
       if (invoiceIds.length > 0) {
-        await tx.delete(payments).where(and(eq4(payments.userId, userId), inArray(payments.invoiceId, invoiceIds)));
+        await tx.delete(payments).where(and(eq5(payments.userId, userId), inArray(payments.invoiceId, invoiceIds)));
       }
-      await tx.delete(reminderLogs).where(and(eq4(reminderLogs.clientId, clientId), eq4(reminderLogs.userId, userId)));
-      await tx.delete(recurringProfiles).where(and(eq4(recurringProfiles.clientId, clientId), eq4(recurringProfiles.userId, userId)));
+      await tx.delete(reminderLogs).where(and(eq5(reminderLogs.clientId, clientId), eq5(reminderLogs.userId, userId)));
+      await tx.delete(recurringProfiles).where(and(eq5(recurringProfiles.clientId, clientId), eq5(recurringProfiles.userId, userId)));
       if (invoiceIds.length > 0) {
-        await tx.delete(invoices).where(and(eq4(invoices.clientId, clientId), eq4(invoices.userId, userId)));
+        await tx.delete(invoices).where(and(eq5(invoices.clientId, clientId), eq5(invoices.userId, userId)));
       }
-      const deleted = await tx.delete(clients).where(and(eq4(clients.id, clientId), eq4(clients.userId, userId))).returning();
+      const deleted = await tx.delete(clients).where(and(eq5(clients.id, clientId), eq5(clients.userId, userId))).returning();
       return deleted[0];
     });
   } catch (error) {
@@ -896,13 +1292,13 @@ import { Router as Router3 } from "express";
 
 // src/db/invoices.ts
 init_schema();
-import { eq as eq5, and as and2, desc as desc3, or, sql } from "drizzle-orm";
+import { eq as eq6, and as and2, desc as desc3, or, sql } from "drizzle-orm";
 import crypto from "crypto";
 async function getInvoicesByUserId(userId, options) {
   try {
-    const conditions = [eq5(invoices.userId, userId)];
+    const conditions = [eq6(invoices.userId, userId)];
     if (options?.status && options.status !== "all") {
-      conditions.push(eq5(invoices.status, options.status));
+      conditions.push(eq6(invoices.status, options.status));
     }
     if (options?.search && options.search.trim()) {
       const s = `%${options.search.trim()}%`;
@@ -917,7 +1313,7 @@ async function getInvoicesByUserId(userId, options) {
     let query = db.select({
       invoice: invoices,
       client: clients
-    }).from(invoices).innerJoin(clients, eq5(invoices.clientId, clients.id)).where(and2(...conditions)).orderBy(desc3(invoices.createdAt));
+    }).from(invoices).innerJoin(clients, eq6(invoices.clientId, clients.id)).where(and2(...conditions)).orderBy(desc3(invoices.createdAt));
     if (options?.limit && options.limit > 0) {
       query = query.limit(options.limit);
       if (options.offset && options.offset > 0) {
@@ -939,10 +1335,10 @@ async function getInvoiceById(userId, invoiceId) {
     const rows = await db.select({
       invoice: invoices,
       client: clients
-    }).from(invoices).innerJoin(clients, eq5(invoices.clientId, clients.id)).where(and2(eq5(invoices.id, invoiceId), eq5(invoices.userId, userId)));
+    }).from(invoices).innerJoin(clients, eq6(invoices.clientId, clients.id)).where(and2(eq6(invoices.id, invoiceId), eq6(invoices.userId, userId)));
     if (rows.length === 0) return null;
-    const paymentRows = await db.select().from(payments).where(and2(eq5(payments.invoiceId, invoiceId), eq5(payments.userId, userId))).orderBy(desc3(payments.createdAt));
-    const reminderRows = await db.select().from(reminderLogs).where(and2(eq5(reminderLogs.invoiceId, invoiceId), eq5(reminderLogs.userId, userId))).orderBy(desc3(reminderLogs.sentAt));
+    const paymentRows = await db.select().from(payments).where(and2(eq6(payments.invoiceId, invoiceId), eq6(payments.userId, userId))).orderBy(desc3(payments.createdAt));
+    const reminderRows = await db.select().from(reminderLogs).where(and2(eq6(reminderLogs.invoiceId, invoiceId), eq6(reminderLogs.userId, userId))).orderBy(desc3(reminderLogs.sentAt));
     return {
       ...rows[0].invoice,
       client: rows[0].client,
@@ -956,27 +1352,27 @@ async function getInvoiceById(userId, invoiceId) {
 }
 async function getInvoiceByNumberPublic(identifier) {
   try {
-    const { users: users2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
+    const { users: users3 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
     const rows = await db.select({
       invoice: invoices,
       client: clients,
       merchant: {
-        id: users2.id,
-        businessName: users2.businessName,
-        phone: users2.phone,
-        upiId: users2.upiId,
-        gstin: users2.gstin,
-        address: users2.address,
-        bankName: users2.bankName,
-        bankAccountNo: users2.bankAccountNo,
-        bankIfsc: users2.bankIfsc,
-        industryType: users2.industryType,
-        logoUrl: users2.logoUrl,
-        invoiceTemplate: users2.invoiceTemplate,
-        brandColor: users2.brandColor,
-        customFooter: users2.customFooter
+        id: users3.id,
+        businessName: users3.businessName,
+        phone: users3.phone,
+        upiId: users3.upiId,
+        gstin: users3.gstin,
+        address: users3.address,
+        bankName: users3.bankName,
+        bankAccountNo: users3.bankAccountNo,
+        bankIfsc: users3.bankIfsc,
+        industryType: users3.industryType,
+        logoUrl: users3.logoUrl,
+        invoiceTemplate: users3.invoiceTemplate,
+        brandColor: users3.brandColor,
+        customFooter: users3.customFooter
       }
-    }).from(invoices).innerJoin(clients, eq5(invoices.clientId, clients.id)).innerJoin(users2, eq5(invoices.userId, users2.id)).where(or(eq5(invoices.shareToken, identifier), eq5(invoices.invoiceNumber, identifier)));
+    }).from(invoices).innerJoin(clients, eq6(invoices.clientId, clients.id)).innerJoin(users3, eq6(invoices.userId, users3.id)).where(or(eq6(invoices.shareToken, identifier), eq6(invoices.invoiceNumber, identifier)));
     if (rows.length === 0) return null;
     return {
       ...rows[0].invoice,
@@ -1029,7 +1425,7 @@ async function updateInvoiceStatus(userId, invoiceId, status, paidAmount) {
     if (paidAmount !== void 0) {
       updateObj.paidAmount = paidAmount;
     }
-    const updated = await db.update(invoices).set(updateObj).where(and2(eq5(invoices.id, invoiceId), eq5(invoices.userId, userId))).returning();
+    const updated = await db.update(invoices).set(updateObj).where(and2(eq6(invoices.id, invoiceId), eq6(invoices.userId, userId))).returning();
     return updated[0];
   } catch (error) {
     console.error("Failed to update invoice status:", error);
@@ -1042,7 +1438,7 @@ async function recordReminderSent(userId, invoiceId) {
       reminderSentCount: sql`${invoices.reminderSentCount} + 1`,
       lastReminderSentAt: /* @__PURE__ */ new Date(),
       updatedAt: /* @__PURE__ */ new Date()
-    }).where(and2(eq5(invoices.id, invoiceId), eq5(invoices.userId, userId))).returning();
+    }).where(and2(eq6(invoices.id, invoiceId), eq6(invoices.userId, userId))).returning();
     return updated[0];
   } catch (error) {
     console.error("Failed to update reminder count:", error);
@@ -1055,7 +1451,7 @@ async function deleteInvoice(userId, invoiceId, reason) {
       isCancelled: true,
       cancelReason: reason || "Cancelled by user / voided invoice",
       updatedAt: /* @__PURE__ */ new Date()
-    }).where(and2(eq5(invoices.id, invoiceId), eq5(invoices.userId, userId))).returning();
+    }).where(and2(eq6(invoices.id, invoiceId), eq6(invoices.userId, userId))).returning();
     return updated[0];
   } catch (error) {
     console.error("Failed to cancel invoice:", error);
@@ -1065,7 +1461,7 @@ async function deleteInvoice(userId, invoiceId, reason) {
 
 // src/services/invoices.service.ts
 init_schema();
-import { eq as eq6, and as and3 } from "drizzle-orm";
+import { eq as eq7, and as and3 } from "drizzle-orm";
 async function getInvoicesService(userId, options) {
   return await getInvoicesByUserId(userId, options);
 }
@@ -1091,7 +1487,7 @@ async function createInvoiceService(userId, data) {
   if (isNaN(clientId) || clientId <= 0) {
     throw new BadRequestError("Valid clientId is required to generate an invoice.");
   }
-  const clientExists = await db.select({ id: clients.id }).from(clients).where(and3(eq6(clients.id, clientId), eq6(clients.userId, userId))).limit(1);
+  const clientExists = await db.select({ id: clients.id }).from(clients).where(and3(eq7(clients.id, clientId), eq7(clients.userId, userId))).limit(1);
   if (clientExists.length === 0) {
     throw new NotFoundError("Client not found in your client directory.");
   }
@@ -1249,7 +1645,7 @@ import { Router as Router4 } from "express";
 
 // src/services/payments.service.ts
 init_schema();
-import { eq as eq7, and as and4, desc as desc4 } from "drizzle-orm";
+import { eq as eq8, and as and4, desc as desc4 } from "drizzle-orm";
 async function recordPaymentService(userId, data) {
   const invoiceId = Number(data.invoiceId);
   const paymentAmount = parseFloat(String(data.amount || "0"));
@@ -1260,7 +1656,7 @@ async function recordPaymentService(userId, data) {
     throw new BadRequestError("Payment amount must be greater than 0.");
   }
   return await db.transaction(async (tx) => {
-    const invRows = await tx.select().from(invoices).where(and4(eq7(invoices.id, invoiceId), eq7(invoices.userId, userId)));
+    const invRows = await tx.select().from(invoices).where(and4(eq8(invoices.id, invoiceId), eq8(invoices.userId, userId)));
     if (invRows.length === 0) {
       throw new NotFoundError("Invoice not found or does not belong to your account.");
     }
@@ -1274,7 +1670,7 @@ async function recordPaymentService(userId, data) {
       referenceNumber: data.referenceNumber || "",
       notes: data.notes || ""
     }).returning();
-    const allPayments = await tx.select().from(payments).where(and4(eq7(payments.invoiceId, invoiceId), eq7(payments.userId, userId)));
+    const allPayments = await tx.select().from(payments).where(and4(eq8(payments.invoiceId, invoiceId), eq8(payments.userId, userId)));
     const totalPaid = allPayments.reduce((acc, p) => acc + parseFloat(p.amount || "0"), 0);
     const invoiceTotal = parseFloat(invoice.totalAmount);
     let newStatus = "pending";
@@ -1287,12 +1683,12 @@ async function recordPaymentService(userId, data) {
       status: newStatus,
       paidAmount: totalPaid.toFixed(2),
       updatedAt: /* @__PURE__ */ new Date()
-    }).where(and4(eq7(invoices.id, invoiceId), eq7(invoices.userId, userId)));
+    }).where(and4(eq8(invoices.id, invoiceId), eq8(invoices.userId, userId)));
     return inserted[0];
   });
 }
 async function getPaymentsService(userId) {
-  return await db.select().from(payments).where(eq7(payments.userId, userId)).orderBy(desc4(payments.createdAt));
+  return await db.select().from(payments).where(eq8(payments.userId, userId)).orderBy(desc4(payments.createdAt));
 }
 
 // src/controllers/payments.controller.ts
@@ -1319,7 +1715,7 @@ import { Router as Router5 } from "express";
 
 // src/db/reminders.ts
 init_schema();
-import { eq as eq8, desc as desc5 } from "drizzle-orm";
+import { eq as eq9, desc as desc5 } from "drizzle-orm";
 async function logWhatsAppReminder(userId, data) {
   try {
     const inserted = await db.insert(reminderLogs).values({
@@ -1345,7 +1741,7 @@ async function getReminderLogsByUserId(userId) {
       log: reminderLogs,
       client: clients,
       invoice: invoices
-    }).from(reminderLogs).leftJoin(clients, eq8(reminderLogs.clientId, clients.id)).leftJoin(invoices, eq8(reminderLogs.invoiceId, invoices.id)).where(eq8(reminderLogs.userId, userId)).orderBy(desc5(reminderLogs.sentAt));
+    }).from(reminderLogs).leftJoin(clients, eq9(reminderLogs.clientId, clients.id)).leftJoin(invoices, eq9(reminderLogs.invoiceId, invoices.id)).where(eq9(reminderLogs.userId, userId)).orderBy(desc5(reminderLogs.sentAt));
     return logs.map((l) => ({
       ...l.log,
       clientName: l.client?.name || "Customer",
@@ -1560,10 +1956,10 @@ import { Router as Router6 } from "express";
 
 // src/db/payments.ts
 init_schema();
-import { eq as eq9, and as and6, desc as desc6 } from "drizzle-orm";
+import { eq as eq10, and as and6, desc as desc6 } from "drizzle-orm";
 async function getPaymentsForUser(userId) {
   try {
-    return await db.select().from(payments).where(eq9(payments.userId, userId)).orderBy(desc6(payments.createdAt));
+    return await db.select().from(payments).where(eq10(payments.userId, userId)).orderBy(desc6(payments.createdAt));
   } catch (error) {
     console.error("Failed to fetch payments:", error);
     throw new Error("Failed to fetch payments.", { cause: error });
@@ -1761,7 +2157,7 @@ import { Router as Router8 } from "express";
 
 // src/db/recurring.ts
 init_schema();
-import { eq as eq10, and as and7, desc as desc7, lte } from "drizzle-orm";
+import { eq as eq11, and as and7, desc as desc7, lte } from "drizzle-orm";
 async function getRecurringProfilesByUserId(userId) {
   const rows = await db.select({
     profile: recurringProfiles,
@@ -1772,14 +2168,14 @@ async function getRecurringProfilesByUserId(userId) {
       phone: clients.phone,
       email: clients.email
     }
-  }).from(recurringProfiles).innerJoin(clients, eq10(recurringProfiles.clientId, clients.id)).where(eq10(recurringProfiles.userId, userId)).orderBy(desc7(recurringProfiles.createdAt));
+  }).from(recurringProfiles).innerJoin(clients, eq11(recurringProfiles.clientId, clients.id)).where(eq11(recurringProfiles.userId, userId)).orderBy(desc7(recurringProfiles.createdAt));
   return rows.map((r) => ({
     ...r.profile,
     client: r.client
   }));
 }
 async function getRecurringProfileById(userId, id) {
-  const rows = await db.select().from(recurringProfiles).where(and7(eq10(recurringProfiles.id, id), eq10(recurringProfiles.userId, userId))).limit(1);
+  const rows = await db.select().from(recurringProfiles).where(and7(eq11(recurringProfiles.id, id), eq11(recurringProfiles.userId, userId))).limit(1);
   return rows.length > 0 ? rows[0] : null;
 }
 async function createRecurringProfileInDb(userId, data) {
@@ -1815,11 +2211,11 @@ async function toggleRecurringProfileInDb(userId, id) {
   const updated = await db.update(recurringProfiles).set({
     isActive: !existing.isActive,
     updatedAt: /* @__PURE__ */ new Date()
-  }).where(and7(eq10(recurringProfiles.id, id), eq10(recurringProfiles.userId, userId))).returning();
+  }).where(and7(eq11(recurringProfiles.id, id), eq11(recurringProfiles.userId, userId))).returning();
   return updated.length > 0 ? updated[0] : null;
 }
 async function deleteRecurringProfileFromDb(userId, id) {
-  const deleted = await db.delete(recurringProfiles).where(and7(eq10(recurringProfiles.id, id), eq10(recurringProfiles.userId, userId))).returning();
+  const deleted = await db.delete(recurringProfiles).where(and7(eq11(recurringProfiles.id, id), eq11(recurringProfiles.userId, userId))).returning();
   return deleted.length > 0;
 }
 async function getDueRecurringProfiles(todayStr) {
@@ -1827,9 +2223,9 @@ async function getDueRecurringProfiles(todayStr) {
     profile: recurringProfiles,
     client: clients,
     merchant: users
-  }).from(recurringProfiles).innerJoin(clients, eq10(recurringProfiles.clientId, clients.id)).innerJoin(users, eq10(recurringProfiles.userId, users.id)).where(
+  }).from(recurringProfiles).innerJoin(clients, eq11(recurringProfiles.clientId, clients.id)).innerJoin(users, eq11(recurringProfiles.userId, users.id)).where(
     and7(
-      eq10(recurringProfiles.isActive, true),
+      eq11(recurringProfiles.isActive, true),
       lte(recurringProfiles.nextRunDate, todayStr)
     )
   );
@@ -1841,7 +2237,7 @@ async function updateRecurringProfileNextRun(id, nextRunDate, generatedCount, is
     lastGeneratedAt: /* @__PURE__ */ new Date(),
     isActive,
     updatedAt: /* @__PURE__ */ new Date()
-  }).where(eq10(recurringProfiles.id, id)).returning();
+  }).where(eq11(recurringProfiles.id, id)).returning();
 }
 
 // src/services/recurring.service.ts

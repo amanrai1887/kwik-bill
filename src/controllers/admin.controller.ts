@@ -4,6 +4,7 @@ import { getAllTenants, updateTenantSubscription } from "../db/users.ts";
 import { db } from "../db/index.ts";
 import { users } from "../db/schema.ts";
 import { createPlanRequest, getAllPlanRequests, updatePlanRequestStatus } from "../db/planRequests.ts";
+import { sendAdminPlanRequestNotification } from "../services/email.service.ts";
 import { asyncHandler, ApiResponse, BadRequestError, parsePositiveInt } from "../utils/apiResponse.ts";
 
 export const getTenants = asyncHandler(async (req: AuthRequest, res: Response) => {
@@ -61,6 +62,18 @@ export const submitPlanRequest = asyncHandler(async (req: AuthRequest, res: Resp
     requestedPlan,
     businessNeeds,
   });
+
+  // Dispatch email notification to admin
+  sendAdminPlanRequestNotification({
+    businessName,
+    contactPerson,
+    email: email || req.dbUser.email,
+    phone,
+    industryType: industryType || 'general',
+    requestedPlan,
+    businessNeeds,
+    userId,
+  }).catch((err) => console.error('[Admin Notification Error]:', err));
 
   return ApiResponse.success(res, { request: created }, 201, "Plan request submitted successfully");
 });

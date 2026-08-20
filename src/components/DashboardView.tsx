@@ -24,6 +24,7 @@ interface DashboardViewProps {
   onOpenInvoice: (invoice: Invoice) => void;
   onSendReminder: (invoice: Invoice) => void;
   onViewAllInvoices: () => void;
+  onOpenPlanModal?: () => void;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
@@ -34,6 +35,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onOpenInvoice,
   onSendReminder,
   onViewAllInvoices,
+  onOpenPlanModal,
 }) => {
   const metrics = analytics?.metrics || {
     totalInvoiced: 0,
@@ -90,12 +92,22 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </p>
             </div>
           </div>
-          <a
-            href="#settings"
-            className="self-start sm:self-auto px-4 py-2 rounded-xl bg-white text-emerald-900 font-bold text-xs shadow-xs hover:bg-emerald-50 transition-colors shrink-0"
-          >
-            Upgrade Plan (₹299 / ₹499)
-          </a>
+          {onOpenPlanModal ? (
+            <button
+              type="button"
+              onClick={onOpenPlanModal}
+              className="self-start sm:self-auto px-4 py-2 rounded-xl bg-white text-emerald-900 font-bold text-xs shadow-xs hover:bg-emerald-50 transition-colors shrink-0 cursor-pointer"
+            >
+              Upgrade Plan (₹299 / ₹499)
+            </button>
+          ) : (
+            <a
+              href="#settings"
+              className="self-start sm:self-auto px-4 py-2 rounded-xl bg-white text-emerald-900 font-bold text-xs shadow-xs hover:bg-emerald-50 transition-colors shrink-0"
+            >
+              Upgrade Plan (₹299 / ₹499)
+            </a>
+          )}
         </div>
       )}
 

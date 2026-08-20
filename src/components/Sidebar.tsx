@@ -45,6 +45,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const isSuperAdmin = isSuperAdminUser(profile) || isSuperAdminUser(user);
 
+  let remainingTrialDays = 15;
+  if (profile?.trialEndsAt) {
+    const diffTime = new Date(profile.trialEndsAt).getTime() - Date.now();
+    remainingTrialDays = Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+  }
+
   const isPro = profile?.subscriptionPlan === 'pro_499' || isSuperAdmin;
 
   const navItems = isSuperAdmin
@@ -178,7 +184,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 {isSuperAdmin ? 'SaaS SuperAdmin' : (profile?.businessName || 'My Business')}
               </div>
               <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
-                {isSuperAdmin ? 'Platform Owner' : (profile?.subscriptionPlan === 'pro_499' ? '₹499 Pro Plan' : '₹299 Starter')}
+                {isSuperAdmin
+                  ? 'Platform Owner'
+                  : profile?.subscriptionPlan === 'pro_499'
+                  ? '₹499 Pro Plan'
+                  : profile?.subscriptionPlan === 'starter_299'
+                  ? '₹299 Starter Plan'
+                  : `15-Day Trial (${remainingTrialDays}d left)`}
               </div>
             </div>
           </div>

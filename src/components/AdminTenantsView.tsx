@@ -445,14 +445,15 @@ export const AdminTenantsView: React.FC = () => {
                             disabled={updatingId === t.id}
                             onChange={(e) => handleUpdateSubscription(t.id, t.subscriptionPlan, e.target.value)}
                             className={`py-1 px-2 border rounded-lg text-xs font-bold ${
-                              t.subscriptionStatus === 'active'
+                              t.subscriptionStatus === 'active' || t.subscriptionStatus === 'trial'
                                 ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                                 : 'bg-rose-50 text-rose-700 border-rose-200'
                             }`}
                           >
                             <option value="active">Active (Paid)</option>
                             <option value="trial">Trial Access</option>
-                            <option value="inactive">Suspended</option>
+                            <option value="suspended">Suspended Access</option>
+                            <option value="inactive">Inactive</option>
                           </select>
                         )}
                       </td>
@@ -466,9 +467,9 @@ export const AdminTenantsView: React.FC = () => {
                       <td className="py-3.5 px-4 text-right">
                         {!isOwner && (
                           <div className="inline-flex items-center gap-1.5">
-                            {t.subscriptionStatus === 'active' ? (
+                            {t.subscriptionStatus === 'active' || t.subscriptionStatus === 'trial' ? (
                               <button
-                                onClick={() => handleUpdateSubscription(t.id, t.subscriptionPlan, 'inactive')}
+                                onClick={() => handleUpdateSubscription(t.id, t.subscriptionPlan, 'suspended')}
                                 disabled={updatingId === t.id}
                                 className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-600 font-semibold text-[11px] border border-slate-200 transition-colors"
                               >

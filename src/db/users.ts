@@ -2,15 +2,20 @@ import { db } from './index.ts';
 import { users } from './schema.ts';
 import { eq } from 'drizzle-orm';
 import { isSuperAdminEmail } from '../config/app.config.ts';
+import { ensureDemoData } from './demoSeed.ts';
 
 export async function getOrCreateUser(uid: string, email: string, businessName?: string) {
   try {
     const existing = await db.select().from(users).where(eq(users.uid, uid));
     if (existing.length > 0) {
+      if (uid === 'demo-business-owner-101') {
+        await ensureDemoData(existing[0].id);
+      }
       return existing[0];
     }
 
     const isAdmin = isSuperAdminEmail(email);
+    const isDemoUser = uid === 'demo-business-owner-101';
     const role = isAdmin ? 'superadmin' : 'subscriber';
     
     // 15 Days trial calculation
@@ -22,15 +27,15 @@ export async function getOrCreateUser(uid: string, email: string, businessName?:
         uid,
         email,
         role,
-        businessName: businessName || (isAdmin ? 'Platform SuperAdmin' : 'My Business'),
-        upiId: '',
-        phone: '',
-        gstin: '',
-        address: '',
+        businessName: businessName || (isAdmin ? 'Platform SuperAdmin' : isDemoUser ? 'Speedy Transport Logistics' : 'My Business'),
+        upiId: isDemoUser ? 'speedytrans@okaxis' : '',
+        phone: isDemoUser ? '+91 98200 12345' : '',
+        gstin: isDemoUser ? '27AABCS1429B1ZX' : '',
+        address: isDemoUser ? 'Plot 42, Transport Nagar, JNPT Highway, Navi Mumbai, MH 400705' : '',
         industryType: 'transport',
-        subscriptionPlan: isAdmin ? 'pro_499' : 'trial_15_days',
-        subscriptionStatus: isAdmin ? 'active' : 'trial',
-        trialEndsAt: isAdmin ? null : trialEndsAt,
+        subscriptionPlan: isAdmin || isDemoUser ? 'pro_499' : 'trial_15_days',
+        subscriptionStatus: isAdmin || isDemoUser ? 'active' : 'trial',
+        trialEndsAt: isAdmin || isDemoUser ? null : trialEndsAt,
       })
       .onConflictDoUpdate({
         target: users.uid,
@@ -42,7 +47,12 @@ export async function getOrCreateUser(uid: string, email: string, businessName?:
       })
       .returning();
 
-    return result[0];
+    const created = result[0];
+    if (isDemoUser && created) {
+      await ensureDemoData(created.id);
+    }
+
+    return created;
 
   } catch (error) {
     console.error("Database user query failed:", error);

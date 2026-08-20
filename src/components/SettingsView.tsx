@@ -25,6 +25,7 @@ import { getPlanLimits } from '../lib/planConfig.ts';
 import { InvoiceRenderer } from './InvoiceRenderer.tsx';
 import { RazorpayCheckoutButton } from './RazorpayCheckoutButton.tsx';
 import { LegalComplianceModal } from './LegalComplianceModal.tsx';
+import { PlanSelectionModal } from './PlanSelectionModal.tsx';
 import { toast } from '../context/ToastContext.tsx';
 
 interface SettingsViewProps {
@@ -52,6 +53,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ profile, onUpdatePro
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [isLegalModalOpen, setIsLegalModalOpen] = useState(false);
   const [legalTab, setLegalTab] = useState<'gst' | 'terms' | 'privacy' | 'payments'>('gst');
+  const [isPlanModalOpen, setIsPlanModalOpen] = useState(false);
+  const [planModalInitial, setPlanModalInitial] = useState<'trial_15_days' | 'starter_299' | 'pro_499'>('pro_499');
 
   // WhatsApp Direct API Gateway Config
   const [whatsappPhoneNumberId, setWhatsappPhoneNumberId] = useState(profile?.whatsappPhoneNumberId || '');
@@ -534,17 +537,17 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ profile, onUpdatePro
               </div>
 
               <div className="pt-2 border-t border-slate-100 dark:border-slate-700/60">
-                <RazorpayCheckoutButton
-                  planId="starter_299"
-                  planName="Starter Plan"
-                  amountInRupees={299}
-                  buttonText={subscriptionPlan === 'starter_299' ? 'Renew Starter (₹299)' : 'Pay ₹299 via Razorpay'}
-                  className="w-full bg-slate-900 hover:bg-slate-800 dark:bg-indigo-600 dark:hover:bg-indigo-700 text-white"
-                  onPaymentSuccess={async (res) => {
-                    setSubscriptionPlan('starter_299');
-                    await onUpdateProfile({ subscriptionPlan: 'starter_299', subscriptionStatus: 'active' });
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPlanModalInitial('starter_299');
+                    setIsPlanModalOpen(true);
                   }}
-                />
+                  className="w-full py-2.5 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-indigo-600 dark:hover:bg-indigo-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <CreditCard className="w-3.5 h-3.5" />
+                  <span>{subscriptionPlan === 'starter_299' ? 'Manage / Renew Starter (₹299)' : 'Request Starter Plan (₹299)'}</span>
+                </button>
               </div>
             </div>
 
@@ -578,17 +581,17 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ profile, onUpdatePro
               </div>
 
               <div className="pt-2 border-t border-slate-100 dark:border-slate-700/60">
-                <RazorpayCheckoutButton
-                  planId="pro_499"
-                  planName="Pro Growth Plan"
-                  amountInRupees={499}
-                  buttonText={subscriptionPlan === 'pro_499' ? 'Renew Pro (₹499)' : 'Upgrade to Pro (₹499)'}
-                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white"
-                  onPaymentSuccess={async (res) => {
-                    setSubscriptionPlan('pro_499');
-                    await onUpdateProfile({ subscriptionPlan: 'pro_499', subscriptionStatus: 'active' });
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPlanModalInitial('pro_499');
+                    setIsPlanModalOpen(true);
                   }}
-                />
+                  className="w-full py-2.5 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm shadow-indigo-600/30 transition-all hover:scale-[1.01] cursor-pointer"
+                >
+                  <Zap className="w-3.5 h-3.5" />
+                  <span>{subscriptionPlan === 'pro_499' ? 'Manage / Renew Pro (₹499)' : 'Request Upgrade to Pro (₹499)'}</span>
+                </button>
               </div>
             </div>
           </div>
@@ -925,6 +928,17 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ profile, onUpdatePro
           </div>
         </div>
       )}
+
+      {/* Plan Selection / Inquiry Modal */}
+      <PlanSelectionModal
+        isOpen={isPlanModalOpen}
+        onClose={() => setIsPlanModalOpen(false)}
+        initialPlan={planModalInitial}
+        onSelectPlan={async (plan) => {
+          setSubscriptionPlan(plan);
+          await onUpdateProfile({ subscriptionPlan: plan, subscriptionStatus: 'active' });
+        }}
+      />
     </div>
   );
 };

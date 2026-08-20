@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { AuthProvider, useAuth } from './lib/AuthContext.tsx';
 import { ThemeProvider } from './context/ThemeContext.tsx';
 import { LandingPage } from './landing/LandingPage.tsx';
@@ -46,6 +46,8 @@ import { getPlanLimits, isSuperAdminUser } from './lib/planConfig.ts';
 
 import { LoginModal } from './components/LoginModal.tsx';
 import { PublicInvoicePayView } from './components/PublicInvoicePayView.tsx';
+import { AccountSuspendedView } from './components/AccountSuspendedView.tsx';
+import { TrialExpiredView } from './components/TrialExpiredView.tsx';
 
 function AppContent() {
   const { user, loading } = useAuth();
@@ -118,12 +120,26 @@ function AppContent() {
     localStorage.setItem('kwikbill_active_tab', activeTab);
   }, [activeTab]);
 
-  // When a user logs in, automatically take them into the workspace app view
+  const prevUserRef = useRef(user);
+
+  // Sync view state on login / logout transitions
   useEffect(() => {
-    if (user && !loading) {
+    if (prevUserRef.current && !user) {
+      // User just logged out: redirect to landing and reset state
+      setCurrentView('landing');
+      setProfile(null);
+      setClients([]);
+      setInvoices([]);
+      setAnalytics(null);
+      setReminderLogs([]);
+      localStorage.removeItem('kwikbill_current_view');
+      localStorage.removeItem('kwikbill_active_tab');
+    } else if (!prevUserRef.current && user) {
+      // User just logged in: navigate to workspace
       setCurrentView('app');
     }
-  }, [user, loading]);
+    prevUserRef.current = user;
+  }, [user]);
 
   // Application Data States
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -133,21 +149,24 @@ function AppContent() {
   const [reminderLogs, setReminderLogs] = useState<ReminderLog[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-
-
   // Load all data from PostgreSQL via backend API
   const loadAllData = useCallback(async () => {
     setIsLoading(true);
     try {
       const [profileRes, clientsRes, invoicesRes, analyticsRes, logsRes] = await Promise.all([
-        fetchProfile().catch(() => null),
+        fetchProfile().catch((err) => {
+          if (err?.code === 'ACCOUNT_SUSPENDED' || err?.status === 403) {
+            setProfile((prev) => prev ? { ...prev, subscriptionStatus: 'suspended' } : null);
+          }
+          return null;
+        }),
         fetchClients().catch(() => ({ clients: [] })),
         fetchInvoices().catch(() => ({ invoices: [] })),
         fetchAnalytics().catch(() => null),
         fetchReminderLogs().catch(() => ({ logs: [] })),
       ]);
 
-      const loadedProfile = profileRes?.user || profileRes || null;
+      const loadedProfile = profileRes?.user || profileRes?.data?.user || (profileRes?.id ? profileRes : null);
       if (loadedProfile) setProfile(loadedProfile);
 
       if (Array.isArray(clientsRes?.clients)) setClients(clientsRes.clients);
@@ -170,8 +189,30 @@ function AppContent() {
   }, []);
 
   useEffect(() => {
-    loadAllData();
-  }, [loadAllData, user]);
+    if (currentView === 'app') {
+      loadAllData();
+    }
+  }, [loadAllData, user, currentView]);
+
+  // Re-verify profile when tab comes into focus
+  useEffect(() => {
+    const handleFocus = () => {
+      if (user) {
+        fetchProfile()
+          .then((res: any) => {
+            const fresh = res?.user || res?.data?.user || (res?.id ? res : null);
+            if (fresh) setProfile(fresh);
+          })
+          .catch((err) => {
+            if (err?.code === 'ACCOUNT_SUSPENDED' || err?.status === 403) {
+              setProfile((prev) => prev ? { ...prev, subscriptionStatus: 'suspended' } : null);
+            }
+          });
+      }
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [user]);
 
   // When a user logs in:
   // If they are superadmin -> direct to Admin Console
@@ -398,6 +439,61 @@ function AppContent() {
 
 
 
+  const isSuperAdmin = isSuperAdminUser(profile) || isSuperAdminUser(user);
+  const isSuspended =
+    !isSuperAdmin &&
+    Boolean(profile?.subscriptionStatus && ['suspended', 'inactive', 'cancelled'].includes(profile.subscriptionStatus));
+
+  const isTrial = profile?.subscriptionStatus === 'trial' || profile?.subscriptionPlan === 'trial_15_days';
+  const isTrialEnded =
+    !isSuperAdmin &&
+    profile?.subscriptionStatus !== 'active' &&
+    (profile?.subscriptionStatus === 'expired' ||
+      Boolean(isTrial && profile?.trialEndsAt && new Date(profile.trialEndsAt).getTime() <= Date.now()));
+
+  if (isSuspended) {
+    return (
+      <>
+        <AccountSuspendedView
+          profile={profile}
+          onOpenPlanRequest={() => setIsPlanModalOpen(true)}
+          onViewLanding={() => setCurrentView('landing')}
+        />
+        <PlanSelectionModal
+          isOpen={isPlanModalOpen}
+          onClose={() => setIsPlanModalOpen(false)}
+          onSelectPlan={handleSelectPlan}
+        />
+      </>
+    );
+  }
+
+  if (isTrialEnded) {
+    return (
+      <>
+        <TrialExpiredView
+          profile={profile}
+          onOpenPlanRequest={() => setIsPlanModalOpen(true)}
+          onViewLanding={() => setCurrentView('landing')}
+        />
+        <PlanSelectionModal
+          isOpen={isPlanModalOpen}
+          onClose={() => setIsPlanModalOpen(false)}
+          onSelectPlan={handleSelectPlan}
+        />
+      </>
+    );
+  }
+
+  const requireAuthAction = (actionName: string, actionFn?: () => void) => {
+    if (!user) {
+      toast.info(`Please sign in or register to ${actionName}. Demo workspace is read-only.`, 'Sign In Required');
+      setIsLoginModalOpen(true);
+      return;
+    }
+    if (actionFn) actionFn();
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex text-slate-900 dark:text-slate-100 selection:bg-indigo-500 selection:text-white transition-colors duration-200">
       {/* Desktop Sidebar */}
@@ -405,7 +501,7 @@ function AppContent() {
         <Sidebar
           activeTab={activeTab}
           onTabChange={setActiveTab}
-          onCreateInvoice={() => setIsCreateInvoiceOpen(true)}
+          onCreateInvoice={() => requireAuthAction('create new invoices', () => setIsCreateInvoiceOpen(true))}
           onViewLanding={() => setCurrentView('landing')}
           onOpenShortcuts={() => setIsShortcutsModalOpen(true)}
           profile={profile}
@@ -427,8 +523,10 @@ function AppContent() {
                 setIsMobileMenuOpen(false);
               }}
               onCreateInvoice={() => {
-                setIsCreateInvoiceOpen(true);
-                setIsMobileMenuOpen(false);
+                requireAuthAction('create new invoices', () => {
+                  setIsCreateInvoiceOpen(true);
+                  setIsMobileMenuOpen(false);
+                });
               }}
               onViewLanding={() => {
                 setCurrentView('landing');
@@ -446,13 +544,40 @@ function AppContent() {
 
       {/* Main Workspace Area */}
       <div className="flex-1 flex flex-col min-w-0 overflow-x-hidden">
+        {/* Demo Workspace Visitor Notice Banner */}
+        {!user && (
+          <div className="bg-gradient-to-r from-indigo-900 via-indigo-800 to-purple-900 text-white px-4 py-2 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs border-b border-indigo-700/50 shadow-xs z-40">
+            <div className="flex items-center gap-2">
+              <span className="px-2 py-0.5 rounded-full bg-indigo-500/30 border border-indigo-400/40 text-[10px] font-black uppercase tracking-wider">
+                Live Demo Mode
+              </span>
+              <span>You are previewing sample transport data in read-only mode.</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setIsLoginModalOpen(true)}
+                className="px-3 py-1 rounded-lg bg-white text-indigo-950 font-bold text-xs hover:bg-indigo-50 transition-colors shadow-xs cursor-pointer"
+              >
+                Sign In / Register Free
+              </button>
+              <button
+                onClick={() => setCurrentView('landing')}
+                className="text-indigo-200 hover:text-white underline cursor-pointer"
+              >
+                Exit Demo
+              </button>
+            </div>
+          </div>
+        )}
+
         <AppHeader
           activeTab={activeTab}
           profile={profile}
           onOpenMobileMenu={() => setIsMobileMenuOpen(true)}
-          onCreateInvoice={() => setIsCreateInvoiceOpen(true)}
+          onCreateInvoice={() => requireAuthAction('create new invoices', () => setIsCreateInvoiceOpen(true))}
           onViewLanding={() => setCurrentView('landing')}
           onOpenLogin={() => setIsLoginModalOpen(true)}
+          onOpenPlanModal={() => setIsPlanModalOpen(true)}
         />
 
         <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">
@@ -473,21 +598,22 @@ function AppContent() {
                   analytics={analytics}
                   invoices={invoices}
                   profile={profile}
-                  onCreateInvoice={() => setIsCreateInvoiceOpen(true)}
+                  onCreateInvoice={() => requireAuthAction('create new invoices', () => setIsCreateInvoiceOpen(true))}
                   onOpenInvoice={(inv) => setSelectedInvoiceForDetail(inv)}
-                  onSendReminder={(inv) => setSelectedInvoiceForWhatsApp(inv)}
+                  onSendReminder={(inv) => requireAuthAction('send live WhatsApp payment reminders', () => setSelectedInvoiceForWhatsApp(inv))}
                   onViewAllInvoices={() => setActiveTab('invoices')}
+                  onOpenPlanModal={() => setIsPlanModalOpen(true)}
                 />
               )}
 
               {activeTab === 'invoices' && (
                 <InvoicesView
                   invoices={invoices}
-                  onCreateInvoice={() => setIsCreateInvoiceOpen(true)}
+                  onCreateInvoice={() => requireAuthAction('create new invoices', () => setIsCreateInvoiceOpen(true))}
                   onOpenInvoice={(inv) => setSelectedInvoiceForDetail(inv)}
-                  onSendReminder={(inv) => setSelectedInvoiceForWhatsApp(inv)}
-                  onRecordPayment={(inv) => setSelectedInvoiceForPayment(inv)}
-                  onDeleteInvoice={handleDeleteInvoice}
+                  onSendReminder={(inv) => requireAuthAction('send live WhatsApp payment reminders', () => setSelectedInvoiceForWhatsApp(inv))}
+                  onRecordPayment={(inv) => requireAuthAction('record invoice payments', () => setSelectedInvoiceForPayment(inv))}
+                  onDeleteInvoice={(id) => requireAuthAction('delete invoices', () => handleDeleteInvoice(id))}
                 />
               )}
 
@@ -496,7 +622,7 @@ function AppContent() {
                   clients={clients}
                   profile={profile}
                   onUpgrade={() => setIsPlanModalOpen(true)}
-                  onCreateRecurring={() => setIsCreateInvoiceOpen(true)}
+                  onCreateRecurring={() => requireAuthAction('create automated recurring schedules', () => setIsCreateInvoiceOpen(true))}
                 />
               )}
 
@@ -504,17 +630,25 @@ function AppContent() {
                 <ClientsView
                   clients={clients}
                   onAddClient={() => {
-                    setClientToEdit(null);
-                    setIsClientModalOpen(true);
+                    requireAuthAction('add new clients to directory', () => {
+                      setClientToEdit(null);
+                      setIsClientModalOpen(true);
+                    });
                   }}
                   onEditClient={(client) => {
-                    setClientToEdit(client);
-                    setIsClientModalOpen(true);
+                    requireAuthAction('edit client details', () => {
+                      setClientToEdit(client);
+                      setIsClientModalOpen(true);
+                    });
                   }}
-                  onToggleClientStatus={handleToggleClientStatus}
-                  onDeleteClient={handleDeleteClient}
+                  onToggleClientStatus={(id, currentStatus) => {
+                    requireAuthAction('modify client status', () => handleToggleClientStatus(id, currentStatus));
+                  }}
+                  onDeleteClient={(id) => {
+                    requireAuthAction('delete clients', () => handleDeleteClient(id));
+                  }}
                   onCreateInvoiceForClient={(client) => {
-                    setIsCreateInvoiceOpen(true);
+                    requireAuthAction('create invoices for clients', () => setIsCreateInvoiceOpen(true));
                   }}
                 />
               )}
@@ -533,7 +667,12 @@ function AppContent() {
               )}
 
               {activeTab === 'settings' && (
-                <SettingsView profile={profile} onUpdateProfile={handleUpdateProfile} />
+                <SettingsView
+                  profile={profile}
+                  onUpdateProfile={(data) => {
+                    requireAuthAction('save business profile settings', () => handleUpdateProfile(data));
+                  }}
+                />
               )}
 
               {activeTab === 'admin' && (

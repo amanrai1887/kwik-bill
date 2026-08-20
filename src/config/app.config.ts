@@ -32,7 +32,7 @@ export const config = {
   },
 
   // Security / Demo Mode
-  allowDemoAuth: process.env.NODE_ENV !== 'production' && process.env.ALLOW_DEMO_AUTH === 'true',
+  allowDemoAuth: process.env.ALLOW_DEMO_AUTH !== 'false',
 };
 
 export function isSuperAdminEmail(email?: string | null): boolean {
