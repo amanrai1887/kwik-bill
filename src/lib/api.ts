@@ -90,9 +90,19 @@ export async function deleteClient(id: number) {
   return res.json();
 }
 
-export async function fetchInvoices() {
+export async function fetchInvoices(params?: { page?: number; limit?: number; status?: string; search?: string }) {
   const headers = await getAuthHeaders();
-  const res = await fetch('/api/invoices', { headers });
+  let url = '/api/invoices';
+  if (params) {
+    const q = new URLSearchParams();
+    if (params.page) q.append('page', params.page.toString());
+    if (params.limit) q.append('limit', params.limit.toString());
+    if (params.status && params.status !== 'all') q.append('status', params.status);
+    if (params.search) q.append('search', params.search);
+    const qs = q.toString();
+    if (qs) url += `?${qs}`;
+  }
+  const res = await fetch(url, { headers });
   if (!res.ok) throw new Error('Failed to fetch invoices');
   return res.json();
 }

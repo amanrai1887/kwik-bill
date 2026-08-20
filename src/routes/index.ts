@@ -9,8 +9,12 @@ import adminRoutes from "./admin.routes.ts";
 import recurringRoutes from "./recurring.routes.ts";
 import { createOrder, verifyPayment } from "../controllers/razorpay.controller.ts";
 import { requireAuth } from "../middleware/auth.ts";
+import { generalApiLimiter, checkoutLimiter } from "../middleware/rateLimiter.ts";
 
 const apiRouter = Router();
+
+// Apply general API rate limiter
+apiRouter.use(generalApiLimiter);
 
 // Health check endpoint
 apiRouter.get("/health", (req, res) => {
@@ -21,11 +25,11 @@ apiRouter.get("/health", (req, res) => {
   });
 });
 
-// Razorpay Standard Checkout API Endpoints
-apiRouter.post("/create-order", requireAuth, createOrder);
-apiRouter.post("/verify-payment", requireAuth, verifyPayment);
-apiRouter.post("/razorpay/create-order", requireAuth, createOrder);
-apiRouter.post("/razorpay/verify-payment", requireAuth, verifyPayment);
+// Razorpay Standard Checkout API Endpoints (with anti-fraud checkoutLimiter)
+apiRouter.post("/create-order", requireAuth, checkoutLimiter, createOrder);
+apiRouter.post("/verify-payment", requireAuth, checkoutLimiter, verifyPayment);
+apiRouter.post("/razorpay/create-order", requireAuth, checkoutLimiter, createOrder);
+apiRouter.post("/razorpay/verify-payment", requireAuth, checkoutLimiter, verifyPayment);
 
 // Mount domain routes
 apiRouter.use("/user", userRoutes);

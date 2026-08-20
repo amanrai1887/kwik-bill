@@ -16,8 +16,18 @@ export const api = {
   },
 
   // Invoices
-  getInvoices: async () => {
-    const res = await apiClient<{ success: boolean; invoices: Invoice[] }>('/invoices');
+  getInvoices: async (params?: { page?: number; limit?: number; status?: string; search?: string }) => {
+    let url = '/invoices';
+    if (params) {
+      const q = new URLSearchParams();
+      if (params.page) q.append('page', params.page.toString());
+      if (params.limit) q.append('limit', params.limit.toString());
+      if (params.status && params.status !== 'all') q.append('status', params.status);
+      if (params.search) q.append('search', params.search);
+      const qs = q.toString();
+      if (qs) url += `?${qs}`;
+    }
+    const res = await apiClient<{ success: boolean; invoices: Invoice[] }>(url);
     return res.invoices;
   },
   createInvoice: async (data: any) => {

@@ -8,11 +8,12 @@ import {
   removeInvoice 
 } from "../controllers/invoices.controller.ts";
 import { requireAuth } from "../middleware/auth.ts";
+import { publicPayLimiter } from "../middleware/rateLimiter.ts";
 
 const router = Router();
 
-// Public endpoint (accessible without token by clients to view/pay)
-router.get("/public/:invoiceNumber", getPublicInvoice);
+// Public endpoint (protected with rate limiter against DDoS/enumeration)
+router.get("/public/:invoiceNumber", publicPayLimiter, getPublicInvoice);
 
 // Authenticated merchant endpoints
 router.use(requireAuth);

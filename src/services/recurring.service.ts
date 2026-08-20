@@ -35,7 +35,16 @@ function generateRecurringInvoiceNumber(prefix = 'INV'): string {
   return `${prefix}-${year}-${randomNum}`;
 }
 
+// Mutex lock to prevent race conditions during concurrent execution
+let isRecurringProcessing = false;
+
 export async function processRecurringInvoices() {
+  if (isRecurringProcessing) {
+    console.log('[Auto-Billing Engine] Scan already in progress. Skipping concurrent run.');
+    return { count: 0, generated: [], message: 'Scan already in progress' };
+  }
+
+  isRecurringProcessing = true;
   const todayStr = new Date().toISOString().split('T')[0];
 
   try {
@@ -57,6 +66,7 @@ export async function processRecurringInvoices() {
       );
 
     if (dueProfiles.length === 0) {
+      isRecurringProcessing = false;
       return { count: 0, generated: [] };
     }
 
@@ -179,5 +189,7 @@ export async function processRecurringInvoices() {
   } catch (error) {
     console.error('[Auto-Billing Engine] Error processing recurring invoices:', error);
     throw error;
+  } finally {
+    isRecurringProcessing = false;
   }
 }

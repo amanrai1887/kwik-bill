@@ -11,8 +11,24 @@ import {
 export async function getInvoices(req: AuthRequest, res: Response) {
   try {
     const userId = req.dbUser.id;
-    const invoicesList = await getInvoicesByUserId(userId);
-    res.json({ success: true, invoices: invoicesList });
+    const { page, limit, status, search } = req.query;
+
+    const pageNum = page ? parseInt(page as string, 10) : undefined;
+    const limitNum = limit ? parseInt(limit as string, 10) : undefined;
+    const offset = pageNum && limitNum ? (pageNum - 1) * limitNum : undefined;
+
+    const invoicesList = await getInvoicesByUserId(userId, {
+      limit: limitNum,
+      offset,
+      status: status as string,
+      search: search as string,
+    });
+
+    res.json({ 
+      success: true, 
+      invoices: invoicesList,
+      pagination: limitNum ? { page: pageNum || 1, limit: limitNum, count: invoicesList.length } : undefined
+    });
   } catch (error: any) {
     console.error("Failed to get invoices:", error);
     res.status(500).json({ error: error.message || "Failed to get invoices" });

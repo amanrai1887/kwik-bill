@@ -196,7 +196,23 @@ export async function initializeDatabase() {
       );
     `);
 
-    console.log('Database tables verified / initialized successfully.');
+    // 8. Performance Indexes for Enterprise Scale
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_invoices_user_id ON invoices(user_id);
+      CREATE INDEX IF NOT EXISTS idx_invoices_client_id ON invoices(client_id);
+      CREATE INDEX IF NOT EXISTS idx_invoices_status ON invoices(status);
+      CREATE INDEX IF NOT EXISTS idx_invoices_share_token ON invoices(share_token);
+      CREATE INDEX IF NOT EXISTS idx_invoices_created_at ON invoices(created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_clients_user_id ON clients(user_id);
+      CREATE INDEX IF NOT EXISTS idx_payments_invoice_id ON payments(invoice_id);
+      CREATE INDEX IF NOT EXISTS idx_payments_user_id ON payments(user_id);
+      CREATE INDEX IF NOT EXISTS idx_reminder_logs_user_id ON reminder_logs(user_id);
+      CREATE INDEX IF NOT EXISTS idx_reminder_logs_invoice_id ON reminder_logs(invoice_id);
+      CREATE INDEX IF NOT EXISTS idx_recurring_profiles_user_id ON recurring_profiles(user_id);
+      CREATE INDEX IF NOT EXISTS idx_recurring_profiles_next_run ON recurring_profiles(next_run_date, is_active);
+    `);
+
+    console.log('Database tables & performance indexes verified / initialized successfully.');
   } catch (err) {
     console.error('Error initializing database tables:', err);
   }

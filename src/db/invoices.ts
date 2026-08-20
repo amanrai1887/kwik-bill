@@ -1,20 +1,53 @@
 import { db } from './index.ts';
 import { invoices, clients, payments, reminderLogs } from './schema.ts';
-import { eq, and, desc, sql } from 'drizzle-orm';
+import { eq, and, desc, or, sql } from 'drizzle-orm';
 
-export async function getInvoicesByUserId(userId: number) {
+export interface InvoiceQueryOptions {
+  limit?: number;
+  offset?: number;
+  status?: string;
+  search?: string;
+}
+
+export async function getInvoicesByUserId(userId: number, options?: InvoiceQueryOptions) {
   try {
-    const list = await db
+    const conditions = [eq(invoices.userId, userId)];
+
+    if (options?.status && options.status !== 'all') {
+      conditions.push(eq(invoices.status, options.status));
+    }
+
+    if (options?.search && options.search.trim()) {
+      const s = `%${options.search.trim()}%`;
+      conditions.push(
+        or(
+          sql`${invoices.invoiceNumber} ILIKE ${s}`,
+          sql`${clients.name} ILIKE ${s}`,
+          sql`${clients.companyName} ILIKE ${s}`
+        )!
+      );
+    }
+
+    let query = db
       .select({
         invoice: invoices,
         client: clients,
       })
       .from(invoices)
       .innerJoin(clients, eq(invoices.clientId, clients.id))
-      .where(eq(invoices.userId, userId))
+      .where(and(...conditions))
       .orderBy(desc(invoices.createdAt));
 
-    return list.map((item) => ({
+    if (options?.limit && options.limit > 0) {
+      query = (query as any).limit(options.limit);
+      if (options.offset && options.offset > 0) {
+        query = (query as any).offset(options.offset);
+      }
+    }
+
+    const list = await query;
+
+    return list.map((item: any) => ({
       ...item.invoice,
       client: item.client,
     }));
@@ -62,7 +95,6 @@ export async function getInvoiceById(userId: number, invoiceId: number) {
 }
 
 import crypto from "crypto";
-import { or } from "drizzle-orm";
 
 export async function getInvoiceByNumberPublic(identifier: string) {
   try {
