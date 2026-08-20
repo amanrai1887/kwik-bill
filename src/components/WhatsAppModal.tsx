@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   X, 
   MessageSquare, 
@@ -11,7 +11,8 @@ import {
   Clock, 
   AlertTriangle,
   QrCode,
-  Zap
+  Zap,
+  Lock
 } from 'lucide-react';
 import { Invoice, UserProfile } from '../lib/types.ts';
 import { getPlanLimits } from '../lib/planConfig.ts';
@@ -38,9 +39,23 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
 
   const planLimits = getPlanLimits(profile);
   const isPro = planLimits.canUseEscalationTemplates;
+  const canUseDirectApi = Boolean(isPro || profile?.whatsappPhoneNumberId);
+
   const [templateType, setTemplateType] = useState<TemplateType>('standard');
   const [copied, setCopied] = useState(false);
   const [isLogging, setIsLogging] = useState(false);
+  const [sendMethod, setSendMethod] = useState<'direct' | 'wame'>(() => {
+    return canUseDirectApi ? 'direct' : 'wame';
+  });
+  const [directSuccess, setDirectSuccess] = useState<string | null>(null);
+
+  // Synchronize send method when opening modal
+  useEffect(() => {
+    if (isOpen) {
+      setSendMethod(canUseDirectApi ? 'direct' : 'wame');
+      setDirectSuccess(null);
+    }
+  }, [isOpen, canUseDirectApi]);
 
   const clientName = invoice.client?.name || 'Valued Customer';
   const companyName = invoice.client?.companyName || '';
@@ -81,9 +96,6 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
     setTimeout(() => setCopied(false), 2500);
   };
 
-  const [sendMethod, setSendMethod] = useState<'direct' | 'wame'>('direct');
-  const [directSuccess, setDirectSuccess] = useState<string | null>(null);
-
   const handleSendReminder = async () => {
     setIsLogging(true);
     setDirectSuccess(null);
@@ -91,6 +103,18 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
       let phoneWithCountry = clientPhone;
       if (phoneWithCountry.length === 10) {
         phoneWithCountry = `91${phoneWithCountry}`;
+      }
+
+      // Guard if free user somehow triggered direct mode
+      if (sendMethod === 'direct' && !canUseDirectApi) {
+        toast.warning(
+          '1-Click Direct Meta API background sending is a Pro Plan feature. Opening WhatsApp Web (wa.me) instead.',
+          'Switched to wa.me'
+        );
+        const waUrl = `https://wa.me/${phoneWithCountry}?text=${encodeURIComponent(currentMessage)}`;
+        window.open(waUrl, '_blank');
+        onClose();
+        return;
       }
 
       // 1. Dispatch reminder through server (handles direct background API or wa.me logging)
@@ -173,34 +197,47 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  if (!isPro && !profile?.whatsappPhoneNumberId) {
+                  if (!canUseDirectApi) {
                     toast.warning(
                       '1-Click Direct Meta API background sending is a Pro Plan feature. Upgrade to Pro (₹499/mo) or configure Meta API credentials in Settings.',
-                      'Pro Feature'
+                      'Pro Feature Locked'
                     );
+                    setSendMethod('wame');
                     return;
                   }
                   setSendMethod('direct');
                 }}
-                className={`p-3 rounded-xl border text-left transition-all cursor-pointer relative ${
-                  sendMethod === 'direct'
-                    ? 'bg-emerald-50 border-emerald-600 ring-2 ring-emerald-600/20 text-emerald-900'
-                    : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                className={`p-3 rounded-xl border text-left transition-all relative ${
+                  !canUseDirectApi
+                    ? 'bg-slate-50/80 border-slate-200 text-slate-400 cursor-pointer opacity-75 hover:opacity-100'
+                    : sendMethod === 'direct'
+                    ? 'bg-emerald-50 border-emerald-600 ring-2 ring-emerald-600/20 text-emerald-900 cursor-pointer'
+                    : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 cursor-pointer'
                 }`}
               >
                 <div className="font-bold text-xs flex items-center justify-between">
                   <div className="flex items-center gap-1.5">
-                    <Zap className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>1-Click Direct Send</span>
+                    {canUseDirectApi ? (
+                      <Zap className="w-3.5 h-3.5 text-emerald-600" />
+                    ) : (
+                      <Lock className="w-3.5 h-3.5 text-amber-500" />
+                    )}
+                    <span className={!canUseDirectApi ? 'text-slate-600 font-semibold' : ''}>1-Click Direct Send</span>
                   </div>
-                  {!isPro && (
-                    <span className="px-1.5 py-0.2 text-[9px] font-extrabold bg-purple-100 text-purple-700 rounded uppercase">
+                  {!canUseDirectApi ? (
+                    <span className="px-1.5 py-0.5 text-[9px] font-extrabold bg-purple-100 text-purple-700 rounded uppercase">
                       PRO
+                    </span>
+                  ) : (
+                    <span className="px-1.5 py-0.5 text-[9px] font-extrabold bg-emerald-100 text-emerald-700 rounded uppercase">
+                      ACTIVE
                     </span>
                   )}
                 </div>
                 <p className="text-[10px] text-slate-500 mt-1">
-                  Sends in the background instantly via Meta API
+                  {canUseDirectApi
+                    ? 'Sends in the background instantly via Meta API'
+                    : 'Requires Pro Plan or Meta Cloud API credentials'}
                 </p>
               </button>
 
@@ -209,13 +246,18 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
                 onClick={() => setSendMethod('wame')}
                 className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
                   sendMethod === 'wame'
-                    ? 'bg-indigo-50 border-indigo-600 ring-2 ring-indigo-600/20 text-indigo-900'
+                    ? 'bg-emerald-50 border-emerald-600 ring-2 ring-emerald-600/20 text-emerald-900'
                     : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
                 }`}
               >
-                <div className="font-bold text-xs flex items-center gap-1.5">
-                  <ExternalLink className="w-3.5 h-3.5 text-indigo-600" />
-                  <span>Open via wa.me</span>
+                <div className="font-bold text-xs flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <ExternalLink className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Open via wa.me</span>
+                  </div>
+                  <span className="px-1.5 py-0.5 text-[9px] font-extrabold bg-emerald-100 text-emerald-700 rounded uppercase">
+                    DEFAULT
+                  </span>
                 </div>
                 <p className="text-[10px] text-slate-500 mt-1">
                   Opens WhatsApp Web or Mobile app to review and send
