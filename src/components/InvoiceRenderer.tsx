@@ -48,11 +48,29 @@ export const InvoiceRenderer: React.FC<InvoiceRendererProps> = ({
   const logoUrl: string = logoUrlOverride || profile?.logoUrl || '';
   const customFooter: string = customFooterOverride || profile?.customFooter || '';
 
-  const subtotal = parseFloat(invoice.subtotal) || 0;
+  const itemsSubtotal = Array.isArray(invoice.items)
+    ? invoice.items.reduce((sum: number, item: any) => sum + (parseFloat(item.amount) || ((parseFloat(item.quantity) || 0) * (parseFloat(item.rate) || 0))), 0)
+    : 0;
+
+  const rawSubtotal = parseFloat(invoice.subtotal);
+  const subtotal = !isNaN(rawSubtotal) && rawSubtotal > 0 ? rawSubtotal : itemsSubtotal;
+
   const taxRateNum = parseFloat(invoice.taxRate) || 0;
   const tdsAmount = parseFloat(invoice.tdsAmount) || 0;
   const discountAmount = parseFloat(invoice.discountAmount) || 0;
-  const totalAmount = parseFloat(invoice.totalAmount) || 0;
+
+  // GST Calculation Breakdown
+  const gstBreakdown = calculateGstBreakdown(
+    taxRateNum,
+    subtotal,
+    profile?.gstin,
+    invoice.placeOfSupply || invoice.client?.gstin,
+    invoice.taxType ? invoice.taxType === 'inter_state' : undefined
+  );
+
+  const rawTotal = parseFloat(invoice.totalAmount);
+  const computedTotal = Math.max(0, subtotal + gstBreakdown.totalTax - discountAmount - tdsAmount);
+  const totalAmount = !isNaN(rawTotal) && rawTotal > 0 ? rawTotal : computedTotal;
   const paidAmount = parseFloat(invoice.paidAmount) || 0;
   const balanceDue = Math.max(0, totalAmount - paidAmount);
 
@@ -77,15 +95,6 @@ export const InvoiceRenderer: React.FC<InvoiceRendererProps> = ({
       isMounted = false;
     };
   }, [upiUrl]);
-
-  // GST Calculation Breakdown
-  const gstBreakdown = calculateGstBreakdown(
-    taxRateNum,
-    subtotal,
-    profile?.gstin,
-    invoice.placeOfSupply || invoice.client?.gstin,
-    invoice.taxType ? invoice.taxType === 'inter_state' : undefined
-  );
 
   const placeOfSupplyFormatted = getStateNameOrFormatted(invoice.placeOfSupply || invoice.client?.gstin?.substring(0, 2) || profile?.gstin?.substring(0, 2));
   const isRcm = invoice.isRcm === true;

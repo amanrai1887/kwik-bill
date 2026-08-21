@@ -30,14 +30,44 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, onSucce
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string; confirmPassword?: string }>({});
   const [verificationSent, setVerificationSent] = useState(false);
   const [resendStatus, setResendStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
 
   if (!isOpen) return null;
+
+  const validateForm = () => {
+    const errors: { email?: string; password?: string; confirmPassword?: string } = {};
+    const trimmedEmail = email.trim();
+
+    if (!trimmedEmail) {
+      errors.email = 'Email address is required.';
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      errors.email = 'Please enter a valid email address (e.g. name@company.com).';
+    }
+
+    if (!password) {
+      errors.password = 'Password is required.';
+    } else if (password.length < 8) {
+      errors.password = 'Password must be at least 8 characters long.';
+    } else if (isSignUp && !/[a-zA-Z]/.test(password)) {
+      errors.password = 'Password must contain at least one letter.';
+    } else if (isSignUp && !/[0-9]/.test(password)) {
+      errors.password = 'Password must contain at least one numeric digit.';
+    }
+
+    if (isSignUp && password !== confirmPassword) {
+      errors.confirmPassword = 'Passwords do not match.';
+    }
+
+    setFieldErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
 
   const handleGoogleSignIn = async () => {
     setError(null);
@@ -58,21 +88,19 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, onSucce
     e.preventDefault();
     setError(null);
     setResendStatus(null);
+
+    if (!validateForm()) {
+      return;
+    }
+
     setLoading(true);
 
     try {
-      if (!email || !password) {
-        throw new Error('Please enter both your email address and password.');
-      }
-      if (password.length < 6) {
-        throw new Error('Password must contain at least 6 characters.');
-      }
-
       if (isSignUp) {
-        await signUpWithEmail(email, password);
+        await signUpWithEmail(email.trim(), password);
         setVerificationSent(true);
       } else {
-        await signInWithEmail(email, password);
+        await signInWithEmail(email.trim(), password);
         if (onSuccess) onSuccess();
         onClose();
       }
@@ -89,6 +117,8 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, onSucce
         msg = 'This email is already registered. Please sign in instead.';
       } else if (err.code === 'auth/user-not-found') {
         msg = 'No account found with this email. Please click Create Account below.';
+      } else if (err.code === 'auth/weak-password') {
+        msg = 'Password is too weak. Please use at least 8 characters containing both letters and numbers.';
       }
       setError(msg);
     } finally {
@@ -103,7 +133,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, onSucce
     }
     setLoading(true);
     try {
-      await resendVerificationEmail(email, password);
+      await resendVerificationEmail(email.trim(), password);
       setResendStatus('Verification link re-sent! Please check your inbox and spam folder.');
     } catch (e: any) {
       setError(e.message || 'Failed to resend verification email.');
@@ -126,9 +156,8 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, onSucce
           <X className="w-5 h-5" />
         </button>
 
-        {/* LEFT BRAND PROOF COLUMN (Modern SaaS Showcase) */}
+        {/* LEFT BRAND PROOF COLUMN */}
         <div className="hidden md:flex md:w-5/12 bg-gradient-to-br from-indigo-900 via-indigo-950 to-slate-950 p-8 flex-col justify-between relative overflow-hidden text-white border-r border-indigo-950">
-          {/* Subtle Ambient Glow */}
           <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/20 rounded-full blur-3xl pointer-events-none" />
           <div className="absolute bottom-0 left-0 w-64 h-64 bg-emerald-500/15 rounded-full blur-3xl pointer-events-none" />
 
@@ -220,7 +249,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, onSucce
             </div>
 
             {/* Title Header */}
-            <div className="mb-6">
+            <div className="mb-5">
               <h2 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">
                 {isSignUp ? 'Get Started Free' : 'Welcome Back'}
               </h2>
@@ -230,6 +259,14 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, onSucce
                   : 'Enter your credentials to access your billing dashboard.'}
               </p>
             </div>
+
+            {/* Global Error Banner */}
+            {error && (
+              <div className="mb-4 p-3.5 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-2xl flex items-start gap-2.5 text-xs text-rose-700 dark:text-rose-300">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-500" />
+                <span className="leading-relaxed">{error}</span>
+              </div>
+            )}
 
             {/* VERIFICATION SENT STATE */}
             {verificationSent ? (
@@ -269,8 +306,8 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, onSucce
               </div>
             ) : (
               <>
-                {/* EMAIL FORM (Above) */}
-                <form onSubmit={handleSubmit} className="space-y-4">
+                {/* AUTH FORM */}
+                <form onSubmit={handleSubmit} className="space-y-3.5" noValidate>
                   <div>
                     <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block mb-1.5 uppercase tracking-wider">
                       Work Email Address <span className="text-rose-500">*</span>
@@ -279,13 +316,25 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, onSucce
                       <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
                       <input
                         type="email"
-                        required
                         placeholder="you@company.com"
                         value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        className="w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-2xl text-xs font-medium text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all placeholder:text-slate-400"
+                        onChange={(e) => {
+                          setEmail(e.target.value);
+                          if (fieldErrors.email) setFieldErrors(prev => ({ ...prev, email: undefined }));
+                        }}
+                        className={`w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-800/80 border rounded-2xl text-xs font-medium text-slate-900 dark:text-white focus:outline-none transition-all placeholder:text-slate-400 ${
+                          fieldErrors.email 
+                            ? 'border-rose-400 focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20' 
+                            : 'border-slate-200 dark:border-slate-700 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20'
+                        }`}
                       />
                     </div>
+                    {fieldErrors.email && (
+                      <p className="text-[11px] text-rose-500 font-medium mt-1 pl-1 flex items-center gap-1">
+                        <AlertCircle className="w-3 h-3 shrink-0" />
+                        {fieldErrors.email}
+                      </p>
+                    )}
                   </div>
 
                   <div>
@@ -293,21 +342,25 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, onSucce
                       <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
                         Password <span className="text-rose-500">*</span>
                       </label>
-                      {!isSignUp && (
-                        <span className="text-[11px] text-slate-400 dark:text-slate-500 font-medium">
-                          Min. 6 chars
-                        </span>
-                      )}
+                      <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">
+                        Min. 8 chars (letters & numbers)
+                      </span>
                     </div>
                     <div className="relative">
                       <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
                       <input
                         type={showPassword ? 'text' : 'password'}
-                        required
                         placeholder="••••••••"
                         value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        className="w-full pl-10 pr-10 py-3 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-2xl text-xs font-medium text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all placeholder:text-slate-400"
+                        onChange={(e) => {
+                          setPassword(e.target.value);
+                          if (fieldErrors.password) setFieldErrors(prev => ({ ...prev, password: undefined }));
+                        }}
+                        className={`w-full pl-10 pr-10 py-2.5 bg-slate-50 dark:bg-slate-800/80 border rounded-2xl text-xs font-medium text-slate-900 dark:text-white focus:outline-none transition-all placeholder:text-slate-400 ${
+                          fieldErrors.password 
+                            ? 'border-rose-400 focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20' 
+                            : 'border-slate-200 dark:border-slate-700 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20'
+                        }`}
                       />
                       <button
                         type="button"
@@ -318,14 +371,52 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, onSucce
                         {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                       </button>
                     </div>
+                    {fieldErrors.password && (
+                      <p className="text-[11px] text-rose-500 font-medium mt-1 pl-1 flex items-center gap-1">
+                        <AlertCircle className="w-3 h-3 shrink-0" />
+                        {fieldErrors.password}
+                      </p>
+                    )}
                   </div>
+
+                  {/* Confirm Password on Sign Up */}
+                  {isSignUp && (
+                    <div>
+                      <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block mb-1.5 uppercase tracking-wider">
+                        Confirm Password <span className="text-rose-500">*</span>
+                      </label>
+                      <div className="relative">
+                        <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
+                        <input
+                          type={showPassword ? 'text' : 'password'}
+                          placeholder="••••••••"
+                          value={confirmPassword}
+                          onChange={(e) => {
+                            setConfirmPassword(e.target.value);
+                            if (fieldErrors.confirmPassword) setFieldErrors(prev => ({ ...prev, confirmPassword: undefined }));
+                          }}
+                          className={`w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-800/80 border rounded-2xl text-xs font-medium text-slate-900 dark:text-white focus:outline-none transition-all placeholder:text-slate-400 ${
+                            fieldErrors.confirmPassword 
+                              ? 'border-rose-400 focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20' 
+                              : 'border-slate-200 dark:border-slate-700 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20'
+                          }`}
+                        />
+                      </div>
+                      {fieldErrors.confirmPassword && (
+                        <p className="text-[11px] text-rose-500 font-medium mt-1 pl-1 flex items-center gap-1">
+                          <AlertCircle className="w-3 h-3 shrink-0" />
+                          {fieldErrors.confirmPassword}
+                        </p>
+                      )}
+                    </div>
+                  )}
 
                   {/* Primary Submit Button */}
                   <button
                     type="submit"
                     disabled={loading || googleLoading}
                     id="submit-auth-btn"
-                    className="w-full py-3.5 px-4 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/25 transition-all hover:scale-[1.01] cursor-pointer disabled:opacity-50 mt-2"
+                    className="w-full py-3.5 px-4 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/25 transition-all hover:scale-[1.01] cursor-pointer disabled:opacity-50 mt-3"
                   >
                     <span>{loading ? 'Processing...' : isSignUp ? 'Create Workspace Account' : 'Sign In to Workspace'}</span>
                     <ArrowRight className="w-4 h-4" />
@@ -333,7 +424,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, onSucce
                 </form>
 
                 {/* DIVIDER */}
-                <div className="relative flex items-center justify-center my-5">
+                <div className="relative flex items-center justify-center my-4">
                   <div className="border-t border-slate-200 dark:border-slate-800 w-full" />
                   <span className="bg-white dark:bg-slate-900 px-3 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
                     Or continue with
@@ -341,15 +432,14 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, onSucce
                   <div className="border-t border-slate-200 dark:border-slate-800 w-full" />
                 </div>
 
-                {/* 1-CLICK GOOGLE SIGN IN (Below) */}
+                {/* 1-CLICK GOOGLE SIGN IN */}
                 <button
                   type="button"
                   onClick={handleGoogleSignIn}
                   disabled={googleLoading || loading}
                   id="google-auth-btn"
-                  className="w-full py-3 px-4 rounded-2xl bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-200 font-bold text-xs flex items-center justify-center gap-3 border border-slate-200 dark:border-slate-700 shadow-xs hover:border-slate-300 dark:hover:border-slate-600 transition-all hover:scale-[1.01] cursor-pointer disabled:opacity-60 mb-4"
+                  className="w-full py-3 px-4 rounded-2xl bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-200 font-bold text-xs flex items-center justify-center gap-3 border border-slate-200 dark:border-slate-700 shadow-xs hover:border-slate-300 dark:hover:border-slate-600 transition-all hover:scale-[1.01] cursor-pointer disabled:opacity-60 mb-3"
                 >
-                  {/* Google SVG Icon */}
                   <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
                     <path
                       fill="#4285F4"
@@ -378,7 +468,11 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, onSucce
                   </span>
                   <button
                     type="button"
-                    onClick={() => { setIsSignUp(!isSignUp); setError(null); }}
+                    onClick={() => { 
+                      setIsSignUp(!isSignUp); 
+                      setError(null); 
+                      setFieldErrors({}); 
+                    }}
                     className="text-indigo-600 dark:text-indigo-400 font-bold hover:underline cursor-pointer ml-1"
                   >
                     {isSignUp ? 'Sign In' : 'Create Free Account'}
@@ -394,5 +488,3 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, onSucce
     </div>
   );
 };
-
-

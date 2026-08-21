@@ -25,6 +25,7 @@ export const sendReminder = asyncHandler(async (req: AuthRequest, res: Response)
     totalAmount, 
     dueDate, 
     messageContent, 
+    customMessage,
     recipientPhone, 
     sendMethod, 
     pdfUrl, 
@@ -32,18 +33,8 @@ export const sendReminder = asyncHandler(async (req: AuthRequest, res: Response)
   } = req.body;
 
   const parsedInvoiceId = parseInt(String(invoiceId), 10);
-  const parsedClientId = parseInt(String(clientId), 10);
-
-  if (isNaN(parsedInvoiceId) || isNaN(parsedClientId)) {
-    throw new BadRequestError("Valid invoiceId and clientId are required.");
-  }
-
-  if (!messageContent || !messageContent.trim()) {
-    throw new BadRequestError("Reminder message content cannot be empty.");
-  }
-
-  if (!recipientPhone || !recipientPhone.trim()) {
-    throw new BadRequestError("Recipient WhatsApp phone number is required.");
+  if (isNaN(parsedInvoiceId) || parsedInvoiceId <= 0) {
+    throw new BadRequestError("Valid invoiceId is required.");
   }
 
   // Verify that the invoice belongs to this merchant
@@ -52,7 +43,22 @@ export const sendReminder = asyncHandler(async (req: AuthRequest, res: Response)
     throw new NotFoundError("Invoice not found or does not belong to your business account.");
   }
 
-  const cleanPhone = normalizeIndianPhoneNumber(recipientPhone);
+  const parsedClientId = clientId ? parseInt(String(clientId), 10) : invoice.clientId;
+  if (isNaN(parsedClientId) || parsedClientId <= 0) {
+    throw new BadRequestError("Valid clientId is required.");
+  }
+
+  const finalMessage = (messageContent || customMessage || '').trim();
+  if (!finalMessage) {
+    throw new BadRequestError("Reminder message content cannot be empty.");
+  }
+
+  const targetPhone = (recipientPhone || invoice.client?.phone || '').trim();
+  if (!targetPhone) {
+    throw new BadRequestError("Recipient WhatsApp phone number is required.");
+  }
+
+  const cleanPhone = normalizeIndianPhoneNumber(targetPhone);
   let deliveryStatus: 'delivered' | 'sent' | 'api_error' | 'logged' = 'sent';
   let directApiSent = false;
   let apiResponse = null;
@@ -69,7 +75,7 @@ export const sendReminder = asyncHandler(async (req: AuthRequest, res: Response)
 
     const sendResult = await sendWhatsAppMessage({
       recipientPhone: cleanPhone,
-      messageContent,
+      messageContent: finalMessage,
       recipientName,
       invoiceNumber: invoiceNumber || invoice.invoiceNumber,
       invoiceId: parsedInvoiceId,
@@ -91,14 +97,14 @@ export const sendReminder = asyncHandler(async (req: AuthRequest, res: Response)
     invoiceId: parsedInvoiceId,
     clientId: parsedClientId,
     templateType,
-    messageContent,
+    messageContent: finalMessage,
     recipientPhone: cleanPhone,
     status: deliveryStatus,
   });
 
   await invalidateUserCache(userId, 'reminders');
 
-  const whatsappUrl = generateWaMeUrl(cleanPhone, messageContent);
+  const whatsappUrl = generateWaMeUrl(cleanPhone, finalMessage);
 
   return ApiResponse.success(res, {
     directApiSent,

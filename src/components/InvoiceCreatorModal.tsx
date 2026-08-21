@@ -182,9 +182,45 @@ export const InvoiceCreatorModal: React.FC<InvoiceCreatorModalProps> = ({
       return;
     }
 
+    if (!invoiceNumber.trim()) {
+      toast.warning('Invoice number cannot be empty.', 'Invoice Number Required');
+      return;
+    }
+
     // Rule 46(b) validation for GST Invoice Number format (max 16 characters)
     if (invoiceNumber.trim().length > 16) {
       toast.warning('As per Rule 46(b) of CGST Rules, Invoice Number must be 16 characters or less.', 'GST Compliance Warning');
+      return;
+    }
+
+    if (new Date(dueDate) < new Date(issueDate)) {
+      toast.warning('Due date cannot be earlier than invoice issue date.', 'Invalid Date Range');
+      return;
+    }
+
+    if (!items || items.length === 0) {
+      toast.warning('Please add at least one line item to the invoice.', 'Line Item Required');
+      return;
+    }
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (!item.description || !item.description.trim()) {
+        toast.warning(`Item #${i + 1} description cannot be empty.`, 'Item Description Missing');
+        return;
+      }
+      if (Number(item.quantity) <= 0 || isNaN(Number(item.quantity))) {
+        toast.warning(`Item #${i + 1} (${item.description}) must have a quantity greater than 0.`, 'Invalid Quantity');
+        return;
+      }
+      if (Number(item.rate) < 0 || isNaN(Number(item.rate))) {
+        toast.warning(`Item #${i + 1} (${item.description}) rate cannot be negative.`, 'Invalid Rate');
+        return;
+      }
+    }
+
+    if (discountAmount > subtotal) {
+      toast.warning(`Discount (₹${discountAmount}) cannot exceed subtotal (₹${subtotal}).`, 'Invalid Discount');
       return;
     }
 

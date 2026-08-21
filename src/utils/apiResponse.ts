@@ -96,7 +96,7 @@ export function globalErrorHandler(err: any, req: Request, res: Response, next: 
     error: {
       code,
       message,
-      ...(process.env.NODE_ENV !== 'production' && err.details ? { details: err.details } : {}),
+      ...(err.details ? { details: err.details } : {}),
     },
   });
 }

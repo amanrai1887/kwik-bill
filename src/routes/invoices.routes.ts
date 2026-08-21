@@ -10,6 +10,8 @@ import {
 import { requireAuth } from "../middleware/auth.ts";
 import { publicPayLimiter } from "../middleware/rateLimiter.ts";
 import { cacheResponse } from "../middleware/cacheMiddleware.ts";
+import { validateBody } from "../middleware/validate.ts";
+import { createInvoiceSchema } from "../lib/validators/index.ts";
 
 const router = Router();
 
@@ -21,7 +23,7 @@ router.use(requireAuth);
 
 router.get("/", cacheResponse("invoices", 120), getInvoices);
 router.get("/:id", cacheResponse("invoice-detail", 120), getInvoice);
-router.post("/", postInvoice);
+router.post("/", validateBody(createInvoiceSchema), postInvoice);
 router.put("/:id/status", putInvoiceStatus);
 router.delete("/:id", removeInvoice);
 

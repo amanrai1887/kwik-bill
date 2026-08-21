@@ -57,7 +57,11 @@ export const PublicInvoicePayView: React.FC<{ invoiceNumberFromProp?: string }> 
   }, [invoiceNumber]);
 
   const isPaid = invoice ? invoice.status === 'paid' : false;
-  const total = invoice ? parseFloat(invoice.totalAmount || '0') : 0;
+  const itemsSubtotal = Array.isArray(invoice?.items)
+    ? invoice.items.reduce((sum: number, item: any) => sum + (parseFloat(item.amount) || ((parseFloat(item.quantity) || 0) * (parseFloat(item.rate) || 0))), 0)
+    : 0;
+  const rawTotal = invoice ? parseFloat(invoice.totalAmount || '0') : 0;
+  const total = !isNaN(rawTotal) && rawTotal > 0 ? rawTotal : itemsSubtotal;
   const paid = invoice ? parseFloat(invoice.paidAmount || '0') : 0;
   const balanceDue = Math.max(0, total - paid);
   const upiId = invoice?.merchant?.upiId || 'merchant@okhdfcbank';

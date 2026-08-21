@@ -288,7 +288,12 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
               {filteredInvoices.length > 0 ? (
                 filteredInvoices.map((inv) => {
-                  const balanceDue = Math.max(0, (parseFloat(inv.totalAmount) || 0) - (parseFloat(inv.paidAmount) || 0));
+                  const rawTotal = parseFloat(inv.totalAmount) || 0;
+                  const itemsSubtotal = Array.isArray(inv.items)
+                    ? inv.items.reduce((sum: number, item: any) => sum + (parseFloat(item.amount) || ((parseFloat(item.quantity) || 0) * (parseFloat(item.rate) || 0))), 0)
+                    : 0;
+                  const totalAmount = rawTotal > 0 ? rawTotal : itemsSubtotal;
+                  const balanceDue = Math.max(0, totalAmount - (parseFloat(inv.paidAmount) || 0));
                   const isSelected = selectedIds.includes(inv.id);
 
                   return (
@@ -340,7 +345,7 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
                       {/* Amount & Status */}
                       <td className="py-3.5 px-4">
                         <div className="font-bold text-slate-900 dark:text-white font-mono text-sm">
-                          {formatCurrency(inv.totalAmount)}
+                          {formatCurrency(totalAmount)}
                         </div>
                         <div className="flex items-center gap-2 mt-1">
                           <span

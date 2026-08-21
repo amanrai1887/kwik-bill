@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, CreditCard, IndianRupee, CheckCircle2, Sparkles } from 'lucide-react';
+import { X, CreditCard, IndianRupee, AlertCircle, Sparkles } from 'lucide-react';
 import { Invoice } from '../lib/types.ts';
 import { triggerPaymentCelebration } from '../utils/confetti.ts';
 import { toast } from '../context/ToastContext.tsx';
@@ -24,16 +24,41 @@ export const PaymentRecordModal: React.FC<PaymentRecordModalProps> = ({
   const balanceDue = Math.max(0, total - alreadyPaid);
 
   const [amount, setAmount] = useState<number>(balanceDue);
-  const [paymentMethod, setPaymentMethod] = useState<'upi' | 'bank_transfer' | 'cash' | 'cheque'>('upi');
+  const [paymentMethod, setPaymentMethod] = useState<'upi' | 'bank_transfer' | 'cash' | 'cheque' | 'card'>('upi');
   const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [referenceNumber, setReferenceNumber] = useState<string>(`UPI-${Math.floor(10000000 + Math.random() * 90000000)}`);
   const [notes, setNotes] = useState<string>('Received via UPI transaction');
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const validate = (): boolean => {
+    const errors: Record<string, string> = {};
+
+    if (isNaN(amount) || amount <= 0) {
+      errors.amount = 'Please enter a valid payment amount greater than ₹0.';
+    } else if (amount > balanceDue + 0.01) {
+      errors.amount = `Payment amount (₹${amount.toLocaleString('en-IN')}) cannot exceed the balance due (₹${balanceDue.toLocaleString('en-IN')}).`;
+    }
+
+    if (!paymentDate) {
+      errors.paymentDate = 'Payment date is required.';
+    } else {
+      const selected = new Date(paymentDate);
+      const maxFutureDate = new Date();
+      maxFutureDate.setDate(maxFutureDate.getDate() + 30);
+      if (selected > maxFutureDate) {
+        errors.paymentDate = 'Payment date cannot be more than 30 days in the future.';
+      }
+    }
+
+    setFieldErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (amount <= 0) {
-      toast.warning('Payment amount must be greater than ₹0', 'Invalid Amount');
+    if (!validate()) {
+      toast.warning('Please fix the errors before recording the payment.', 'Validation Error');
       return;
     }
 
@@ -41,11 +66,10 @@ export const PaymentRecordModal: React.FC<PaymentRecordModalProps> = ({
     try {
       await onSubmit({
         invoiceId: invoice.id,
-        amount: amount.toFixed(2),
+        amount: Number(amount.toFixed(2)),
         paymentMethod,
         paymentDate,
-        referenceNumber,
-        notes,
+        notes: (referenceNumber ? `Ref: ${referenceNumber.trim()} | ` : '') + notes.trim(),
       });
       // 🎉 Trigger celebratory confetti on payment recording!
       triggerPaymentCelebration();
@@ -82,18 +106,21 @@ export const PaymentRecordModal: React.FC<PaymentRecordModalProps> = ({
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-5 space-y-4 text-xs">
+        <form onSubmit={handleSubmit} className="p-5 space-y-4 text-xs" noValidate>
           {/* Outstanding Balance Banner */}
           <div className="p-3.5 bg-slate-50 dark:bg-slate-800/80 rounded-2xl border border-slate-200 dark:border-slate-700 flex items-center justify-between">
             <div>
               <span className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 block">Total Due</span>
               <span className="font-bold text-slate-900 dark:text-white text-sm font-mono">
-                ₹{balanceDue.toLocaleString('en-IN')}
+                ₹{balanceDue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
               </span>
             </div>
             <button
               type="button"
-              onClick={() => setAmount(balanceDue)}
+              onClick={() => {
+                setAmount(balanceDue);
+                setFieldErrors(prev => ({ ...prev, amount: '' }));
+              }}
               className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 bg-white dark:bg-slate-900 px-2.5 py-1 rounded-xl border border-slate-200 dark:border-slate-700 shadow-2xs cursor-pointer"
             >
               Fill Full Amount
@@ -103,24 +130,34 @@ export const PaymentRecordModal: React.FC<PaymentRecordModalProps> = ({
           {/* Amount */}
           <div>
             <label className="font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider text-[11px] block mb-1">
-              Received Amount (₹) *
+              Received Amount (₹) <span className="text-rose-500">*</span>
             </label>
             <input
               type="number"
-              min="1"
+              min="0.01"
               max={balanceDue}
               step="any"
-              value={amount}
-              onChange={(e) => setAmount(Number(e.target.value))}
-              className="w-full p-2.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl font-bold font-mono text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-              required
+              value={amount || ''}
+              onChange={(e) => {
+                setAmount(parseFloat(e.target.value) || 0);
+                if (fieldErrors.amount) setFieldErrors(prev => ({ ...prev, amount: '' }));
+              }}
+              className={`w-full p-2.5 bg-slate-50 dark:bg-slate-800/80 border rounded-xl font-bold font-mono text-sm text-slate-900 dark:text-white focus:outline-none transition-colors ${
+                fieldErrors.amount ? 'border-rose-400 focus:ring-2 focus:ring-rose-500/20' : 'border-slate-200 dark:border-slate-700 focus:border-indigo-500'
+              }`}
             />
+            {fieldErrors.amount && (
+              <p className="text-[11px] text-rose-500 font-medium mt-1 flex items-center gap-1">
+                <AlertCircle className="w-3 h-3 shrink-0" />
+                {fieldErrors.amount}
+              </p>
+            )}
           </div>
 
           {/* Payment Method */}
           <div>
             <label className="font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider text-[11px] block mb-1">
-              Payment Method *
+              Payment Method <span className="text-rose-500">*</span>
             </label>
             <div className="grid grid-cols-2 gap-2">
               {[
@@ -146,29 +183,38 @@ export const PaymentRecordModal: React.FC<PaymentRecordModalProps> = ({
           </div>
 
           {/* Date & Reference */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider text-[11px] block mb-1">
-                Payment Date
+                Payment Date <span className="text-rose-500">*</span>
               </label>
               <input
                 type="date"
                 value={paymentDate}
-                onChange={(e) => setPaymentDate(e.target.value)}
-                className="w-full p-2 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-medium"
-                required
+                onChange={(e) => {
+                  setPaymentDate(e.target.value);
+                  if (fieldErrors.paymentDate) setFieldErrors(prev => ({ ...prev, paymentDate: '' }));
+                }}
+                className={`w-full p-2.5 bg-slate-50 dark:bg-slate-800/80 border rounded-xl text-slate-900 dark:text-white font-medium transition-colors ${
+                  fieldErrors.paymentDate ? 'border-rose-400' : 'border-slate-200 dark:border-slate-700 focus:border-indigo-500'
+                }`}
               />
+              {fieldErrors.paymentDate && (
+                <p className="text-[11px] text-rose-500 font-medium mt-1">
+                  {fieldErrors.paymentDate}
+                </p>
+              )}
             </div>
             <div>
               <label className="font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider text-[11px] block mb-1">
-                UTR / Ref No.
+                UTR / Reference No.
               </label>
               <input
                 type="text"
                 value={referenceNumber}
                 onChange={(e) => setReferenceNumber(e.target.value)}
                 placeholder="UPI-40918842"
-                className="w-full p-2 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-mono"
+                className="w-full p-2.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-mono"
               />
             </div>
           </div>
@@ -183,7 +229,7 @@ export const PaymentRecordModal: React.FC<PaymentRecordModalProps> = ({
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="e.g. Cleared via Google Pay"
-              className="w-full p-2 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white"
+              className="w-full p-2.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white"
             />
           </div>
 
@@ -192,7 +238,7 @@ export const PaymentRecordModal: React.FC<PaymentRecordModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-3.5 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-semibold hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+              className="px-4 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-semibold hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors cursor-pointer"
             >
               Cancel
             </button>
@@ -200,7 +246,7 @@ export const PaymentRecordModal: React.FC<PaymentRecordModalProps> = ({
               type="submit"
               disabled={isSubmitting}
               id="confirm-payment-record-btn"
-              className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold shadow-sm shadow-indigo-600/30 transition-all hover:scale-[1.02] disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
+              className="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold shadow-md shadow-indigo-600/30 transition-all hover:scale-[1.02] disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
             >
               <Sparkles className="w-3.5 h-3.5 text-amber-300" />
               <span>{isSubmitting ? 'Recording...' : 'Confirm & Celebrate'}</span>
@@ -211,4 +257,3 @@ export const PaymentRecordModal: React.FC<PaymentRecordModalProps> = ({
     </div>
   );
 };
-

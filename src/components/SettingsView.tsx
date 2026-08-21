@@ -27,6 +27,7 @@ import { RazorpayCheckoutButton } from './RazorpayCheckoutButton.tsx';
 import { LegalComplianceModal } from './LegalComplianceModal.tsx';
 import { PlanSelectionModal } from './PlanSelectionModal.tsx';
 import { toast } from '../context/ToastContext.tsx';
+import { isValidPhone, isValidGSTIN, isValidIFSC, isValidUPI, BANK_ACCOUNT_REGEX, HEX_COLOR_REGEX } from '../lib/validators/regexPatterns.ts';
 
 interface SettingsViewProps {
   profile: UserProfile | null;
@@ -107,25 +108,61 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ profile, onUpdatePro
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (businessName.trim() && businessName.trim().length < 2) {
+      toast.warning('Business name must be at least 2 characters.', 'Invalid Business Name');
+      return;
+    }
+
+    if (phone.trim() && !isValidPhone(phone.trim())) {
+      toast.warning('Please enter a valid business phone number (10-digit mobile or international format).', 'Invalid Phone');
+      return;
+    }
+
+    if (gstin.trim() && !isValidGSTIN(gstin.trim())) {
+      toast.warning('GSTIN must be 15 alphanumeric characters (e.g. 27AAPFU0939F1ZV).', 'Invalid GSTIN');
+      return;
+    }
+
+    if (bankIfsc.trim() && !isValidIFSC(bankIfsc.trim())) {
+      toast.warning('Bank IFSC code must be 11 characters (e.g. HDFC0001234).', 'Invalid IFSC');
+      return;
+    }
+
+    if (bankAccountNo.trim() && !BANK_ACCOUNT_REGEX.test(bankAccountNo.replace(/\s/g, ''))) {
+      toast.warning('Bank account number must be between 9 and 18 digits.', 'Invalid Account Number');
+      return;
+    }
+
+    if (upiId.trim() && !isValidUPI(upiId.trim())) {
+      toast.warning('UPI ID must be in valid format (e.g. business@okaxis).', 'Invalid UPI ID');
+      return;
+    }
+
+    if (brandColor.trim() && !HEX_COLOR_REGEX.test(brandColor.trim())) {
+      toast.warning('Brand color must be a valid hex code (e.g. #4f46e5).', 'Invalid Color');
+      return;
+    }
+
     setIsSaving(true);
     try {
       await onUpdateProfile({
-        businessName,
-        phone,
-        upiId,
-        gstin,
-        address,
-        bankName,
-        bankAccountNo,
-        bankIfsc,
+        businessName: businessName.trim(),
+        phone: phone.trim(),
+        upiId: upiId.trim(),
+        gstin: gstin.trim().toUpperCase(),
+        address: address.trim(),
+        bankName: bankName.trim(),
+        bankAccountNo: bankAccountNo.trim(),
+        bankIfsc: bankIfsc.trim().toUpperCase(),
         industryType,
         subscriptionPlan,
         logoUrl,
         invoiceTemplate,
-        brandColor,
-        customFooter,
-        whatsappPhoneNumberId,
-        whatsappApiToken,
+        brandColor: brandColor.trim(),
+        customFooter: customFooter.trim(),
+        whatsappPhoneNumberId: whatsappPhoneNumberId.trim(),
+        whatsappApiToken: whatsappApiToken.trim(),
       });
       setSavedSuccess(true);
       toast.success('Business profile, bank details & invoice styles updated.', 'Settings Saved');

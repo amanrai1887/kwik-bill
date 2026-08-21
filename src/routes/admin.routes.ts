@@ -13,6 +13,8 @@ import {
 import { requireAuth } from "../middleware/auth.ts";
 import { requireSuperAdmin } from "../middleware/admin.ts";
 import { cacheResponse } from "../middleware/cacheMiddleware.ts";
+import { validateBody } from "../middleware/validate.ts";
+import { adminUpdateTenantSchema } from "../lib/validators/index.ts";
 
 const router = Router();
 
@@ -21,7 +23,7 @@ router.use(requireSuperAdmin);
 
 router.get("/tenants", cacheResponse("admin:tenants", 120), getTenants);
 router.post("/tenants", postTenant);
-router.put("/tenants/:id/subscription", putTenantSubscription);
+router.put("/tenants/:id/subscription", validateBody(adminUpdateTenantSchema), putTenantSubscription);
 router.get("/plan-requests", cacheResponse("admin:plan-requests", 120), getPlanRequestsList);
 router.put("/plan-requests/:id", putPlanRequestStatus);
 

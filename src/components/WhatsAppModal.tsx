@@ -106,6 +106,11 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
   };
 
   const handleSendReminder = async () => {
+    if (!clientPhone || clientPhone.length < 10) {
+      toast.warning('The selected client does not have a valid 10-digit WhatsApp phone number. Please edit the client profile first.', 'Invalid Phone Number');
+      return;
+    }
+
     setIsLogging(true);
     setDirectSuccess(null);
     try {

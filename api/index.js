@@ -735,7 +735,7 @@ function globalErrorHandler(err, req, res, next) {
     error: {
       code,
       message,
-      ...process.env.NODE_ENV !== "production" && err.details ? { details: err.details } : {}
+      ...err.details ? { details: err.details } : {}
     }
   });
 }
@@ -1265,7 +1265,8 @@ var requireAuth = async (req, res, next) => {
     if (isWriteMethod) {
       const url = req.originalUrl || req.url || "";
       const isPlanRequest = req.method === "POST" && url.includes("/plan-request");
-      if (!isPlanRequest) {
+      const isCacheReset = req.method === "POST" && url.includes("/cache/reset");
+      if (!isPlanRequest && !isCacheReset) {
         return res.status(403).json({
           success: false,
           error: {
@@ -1359,6 +1360,13 @@ var cacheResponse = (resourceName, ttlSeconds = 180, options = {}) => {
       if (cachedData !== null) {
         res.setHeader("X-Cache", "HIT");
         res.setHeader("X-Cache-Key", cacheKey);
+        const magenta = "\x1B[35m";
+        const cyan = "\x1B[36m";
+        const gray = "\x1B[90m";
+        const reset = "\x1B[0m";
+        console.log(
+          `${magenta}[Redis Cache HIT]${reset} ${cyan}${req.method.padEnd(6)}${reset} ${req.originalUrl || req.url} ${gray}(Serving cached response from key: ${cacheKey})${reset}`
+        );
         return res.status(200).json(cachedData);
       }
       res.setHeader("X-Cache", "MISS");
@@ -1381,11 +1389,240 @@ var cacheResponse = (resourceName, ttlSeconds = 180, options = {}) => {
   };
 };
 
+// src/middleware/validate.ts
+function formatZodError(error) {
+  const fieldErrors = {};
+  const messages = [];
+  for (const issue of error.issues) {
+    const fieldPath = issue.path.length > 0 ? issue.path.join(".") : "root";
+    if (!fieldErrors[fieldPath]) {
+      fieldErrors[fieldPath] = issue.message;
+      messages.push(issue.message);
+    }
+  }
+  const summary = messages.length === 1 ? messages[0] : `Validation error: ${messages.slice(0, 2).join("; ")}${messages.length > 2 ? ` (+${messages.length - 2} more)` : ""}`;
+  return { summary, fieldErrors };
+}
+function validateBody(schema) {
+  return (req, res, next) => {
+    const result = schema.safeParse(req.body);
+    if (!result.success) {
+      const { summary, fieldErrors } = formatZodError(result.error);
+      return next(new BadRequestError(summary, { fieldErrors }));
+    }
+    req.body = result.data;
+    next();
+  };
+}
+
+// src/lib/validators/index.ts
+import { z } from "zod";
+
+// src/lib/validators/regexPatterns.ts
+var EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+var PHONE_REGEX = /^(?:\+?(?:91)?[ -]?)?[6-9]\d{9}$|^\+?[1-9]\d{6,14}$/;
+var GSTIN_REGEX = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+var PAN_REGEX = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
+var IFSC_REGEX = /^[A-Z]{4}0[A-Z0-9]{6}$/;
+var UPI_REGEX = /^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z0-9.\-_]{2,64}$/;
+var HEX_COLOR_REGEX = /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/;
+var BANK_ACCOUNT_REGEX = /^[0-9]{9,18}$/;
+var HSN_SAC_REGEX = /^[0-9]{2,8}$/;
+var INVOICE_NUMBER_REGEX = /^[a-zA-Z0-9/_-]{1,50}$/;
+
+// src/lib/validators/index.ts
+var emailField = z.string().trim().min(1, "Email address cannot be empty.").max(255, "Email address cannot exceed 255 characters.").regex(EMAIL_REGEX, "Please enter a valid email address (e.g. name@company.com).").toLowerCase();
+var optionalEmailField = z.string().trim().max(255, "Email address cannot exceed 255 characters.").optional().or(z.literal("")).refine((val) => !val || EMAIL_REGEX.test(val), {
+  message: "Please enter a valid email address format."
+});
+var passwordField = z.string().min(8, "Password must be at least 8 characters long.").max(128, "Password cannot exceed 128 characters.").refine((val) => /[a-zA-Z]/.test(val), {
+  message: "Password must contain at least one letter."
+}).refine((val) => /[0-9]/.test(val), {
+  message: "Password must contain at least one numeric digit."
+});
+var phoneField = z.string().trim().min(1, "Phone number is required.").refine((val) => {
+  const cleaned = val.replace(/[\s\-()]/g, "");
+  return PHONE_REGEX.test(cleaned);
+}, {
+  message: "Please enter a valid phone number (10-digit mobile or international format)."
+});
+var optionalPhoneField = z.string().trim().optional().or(z.literal("")).refine((val) => {
+  if (!val) return true;
+  const cleaned = val.replace(/[\s\-()]/g, "");
+  return PHONE_REGEX.test(cleaned);
+}, {
+  message: "Please enter a valid phone number (10-digit mobile or international format)."
+});
+var optionalGstinField = z.string().trim().optional().or(z.literal("")).refine((val) => !val || GSTIN_REGEX.test(val.toUpperCase()), {
+  message: "GSTIN must be exactly 15 alphanumeric characters (e.g. 27AAPFU0939F1ZV)."
+}).transform((val) => val ? val.toUpperCase() : "");
+var optionalPanField = z.string().trim().optional().or(z.literal("")).refine((val) => !val || PAN_REGEX.test(val.toUpperCase()), {
+  message: "PAN must be a valid 10-character code (e.g. ABCDE1234F)."
+}).transform((val) => val ? val.toUpperCase() : "");
+var optionalIfscField = z.string().trim().optional().or(z.literal("")).refine((val) => !val || IFSC_REGEX.test(val.toUpperCase()), {
+  message: "IFSC code must be 11 characters (e.g. HDFC0001234)."
+}).transform((val) => val ? val.toUpperCase() : "");
+var optionalUpiField = z.string().trim().optional().or(z.literal("")).refine((val) => !val || UPI_REGEX.test(val), {
+  message: "UPI ID must be in standard format (e.g. yourname@okaxis or 9876543210@upi)."
+});
+var optionalBankAccountField = z.string().trim().optional().or(z.literal("")).refine((val) => !val || BANK_ACCOUNT_REGEX.test(val.replace(/\s/g, "")), {
+  message: "Bank account number must be between 9 and 18 digits."
+});
+var optionalHexColorField = z.string().trim().optional().or(z.literal("")).refine((val) => !val || HEX_COLOR_REGEX.test(val), {
+  message: "Brand color must be a valid hex code (e.g. #4f46e5)."
+});
+var loginSchema = z.object({
+  email: emailField,
+  password: z.string().min(1, "Password cannot be empty.")
+});
+var registerSchema = z.object({
+  email: emailField,
+  password: passwordField,
+  confirmPassword: z.string().optional()
+}).refine(
+  (data) => {
+    if (data.confirmPassword !== void 0 && data.password !== data.confirmPassword) {
+      return false;
+    }
+    return true;
+  },
+  {
+    message: "Passwords do not match.",
+    path: ["confirmPassword"]
+  }
+);
+var forgotPasswordSchema = z.object({
+  email: emailField
+});
+var createClientSchema = z.object({
+  name: z.string().trim().min(2, "Party name must be at least 2 characters.").max(100, "Party name cannot exceed 100 characters."),
+  phone: phoneField,
+  email: optionalEmailField,
+  companyName: z.string().trim().max(120, "Company name cannot exceed 120 characters.").optional().or(z.literal("")),
+  address: z.string().trim().max(300, "Address cannot exceed 300 characters.").optional().or(z.literal("")),
+  gstin: optionalGstinField,
+  industryType: z.enum(["transport", "agency", "freelancer", "consultant", "general"]).default("general"),
+  paymentTermDays: z.coerce.number().int("Payment terms must be a whole number of days.").min(0, "Payment terms cannot be negative.").max(365, "Payment terms cannot exceed 365 days.").default(7),
+  notes: z.string().trim().max(500, "Notes cannot exceed 500 characters.").optional().or(z.literal("")),
+  isActive: z.boolean().default(true).optional()
+});
+var updateClientSchema = createClientSchema.partial();
+var lineItemSchema = z.object({
+  description: z.string().trim().min(1, "Item description cannot be empty.").max(255, "Item description cannot exceed 255 characters."),
+  quantity: z.coerce.number().positive("Quantity must be greater than 0.").max(1e6, "Quantity cannot exceed 1,000,000."),
+  rate: z.coerce.number().min(0, "Rate cannot be negative.").max(1e8, "Rate cannot exceed 100,000,000."),
+  gstRate: z.coerce.number().min(0, "GST rate cannot be negative.").max(100, "GST rate cannot exceed 100%.").default(18),
+  amount: z.coerce.number().optional(),
+  uqc: z.string().trim().max(10).optional().or(z.literal("")),
+  hsnCode: z.string().trim().optional().or(z.literal("")).refine((val) => !val || HSN_SAC_REGEX.test(val), {
+    message: "HSN/SAC code must be between 2 and 8 numeric digits."
+  })
+});
+var rawInvoiceSchema = z.object({
+  invoiceNumber: z.string().trim().min(1, "Invoice number cannot be empty.").max(50, "Invoice number cannot exceed 50 characters.").regex(INVOICE_NUMBER_REGEX, "Invoice number can only contain letters, numbers, hyphens, slashes, and underscores."),
+  clientId: z.coerce.number().int().positive("Please select a valid client / party."),
+  issueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invoice date must be in YYYY-MM-DD format."),
+  dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Due date must be in YYYY-MM-DD format."),
+  items: z.array(lineItemSchema).min(1, "An invoice must contain at least one line item.").max(100, "An invoice cannot contain more than 100 line items."),
+  subtotal: z.coerce.number().or(z.string()).optional(),
+  taxRate: z.coerce.number().min(0).max(100).default(18),
+  taxAmount: z.coerce.number().or(z.string()).optional(),
+  tdsRate: z.coerce.number().min(0).max(30).default(0),
+  tdsAmount: z.coerce.number().or(z.string()).optional(),
+  discountAmount: z.coerce.number().min(0, "Discount cannot be negative.").default(0),
+  totalAmount: z.coerce.number().or(z.string()).optional(),
+  paidAmount: z.coerce.number().or(z.string()).optional(),
+  status: z.enum(["pending", "paid", "overdue", "partial"]).optional(),
+  currency: z.string().default("INR"),
+  placeOfSupply: z.string().trim().max(100).optional().or(z.literal("")),
+  isRcm: z.boolean().default(false).optional(),
+  taxType: z.enum(["intra_state", "inter_state"]).default("intra_state").optional(),
+  notes: z.string().trim().max(1e3, "Notes cannot exceed 1000 characters.").optional().or(z.literal("")),
+  terms: z.string().trim().max(1e3, "Terms cannot exceed 1000 characters.").optional().or(z.literal("")),
+  industryDetails: z.record(z.string(), z.any()).optional(),
+  isRecurring: z.boolean().optional(),
+  recurringFrequency: z.string().optional(),
+  autoSendWhatsApp: z.boolean().optional(),
+  shareToken: z.string().optional()
+});
+var createInvoiceSchema = rawInvoiceSchema.refine(
+  (data) => {
+    return new Date(data.dueDate) >= new Date(data.issueDate);
+  },
+  {
+    message: "Due date cannot be earlier than invoice issue date.",
+    path: ["dueDate"]
+  }
+);
+var updateInvoiceSchema = rawInvoiceSchema.partial();
+var recordPaymentSchema = z.object({
+  invoiceId: z.coerce.number().int().positive("Invalid invoice ID."),
+  amount: z.coerce.number().positive("Payment amount must be greater than 0.").max(1e8, "Amount cannot exceed 100,000,000."),
+  paymentDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Payment date must be in YYYY-MM-DD format."),
+  paymentMethod: z.enum(["cash", "upi", "bank_transfer", "card", "cheque", "razorpay", "other"]).default("upi"),
+  notes: z.string().trim().max(200, "Notes/Transaction ID cannot exceed 200 characters.").optional().or(z.literal(""))
+});
+var updateProfileSchema = z.object({
+  businessName: z.string().trim().min(2, "Business name must be at least 2 characters.").max(120, "Business name cannot exceed 120 characters.").optional(),
+  phone: optionalPhoneField,
+  email: optionalEmailField,
+  address: z.string().trim().max(300, "Business address cannot exceed 300 characters.").optional().or(z.literal("")),
+  gstin: optionalGstinField,
+  pan: optionalPanField,
+  bankName: z.string().trim().max(100, "Bank name cannot exceed 100 characters.").optional().or(z.literal("")),
+  bankAccountNo: optionalBankAccountField,
+  bankIfsc: optionalIfscField,
+  upiId: optionalUpiField,
+  industryType: z.enum(["transport", "agency", "freelancer", "consultant", "general"]).optional(),
+  // Branding
+  logoUrl: z.string().trim().max(1e3).optional().or(z.literal("")),
+  invoiceTemplate: z.enum(["modern", "corporate", "logistics", "creative", "classic", "dark_neon"]).optional(),
+  brandColor: optionalHexColorField,
+  customFooter: z.string().trim().max(500, "Custom footer cannot exceed 500 characters.").optional().or(z.literal("")),
+  // WhatsApp Config
+  whatsappProvider: z.enum(["meta", "generic"]).optional(),
+  whatsappPhoneNumberId: z.string().trim().max(100).optional().or(z.literal("")),
+  whatsappApiToken: z.string().trim().max(500).optional().or(z.literal(""))
+});
+var sendReminderSchema = z.object({
+  invoiceId: z.coerce.number().int().positive("Valid invoice ID is required."),
+  clientId: z.coerce.number().int().positive().optional(),
+  channel: z.enum(["whatsapp", "email", "both"]).default("whatsapp").optional(),
+  templateType: z.string().optional().default("standard"),
+  templateName: z.string().optional(),
+  recipientName: z.string().optional(),
+  invoiceNumber: z.string().optional(),
+  totalAmount: z.coerce.number().or(z.string()).optional(),
+  dueDate: z.string().optional(),
+  messageContent: z.string().trim().max(4e3, "Reminder message cannot exceed 4000 characters.").optional().or(z.literal("")),
+  recipientPhone: optionalPhoneField,
+  recipientEmail: optionalEmailField,
+  sendMethod: z.string().optional().default("wame"),
+  pdfUrl: z.string().optional(),
+  sendAsDocument: z.boolean().optional(),
+  customMessage: z.string().trim().max(4e3, "Reminder message cannot exceed 4000 characters.").optional().or(z.literal(""))
+});
+var createRecurringSchema = z.object({
+  clientId: z.coerce.number().int().positive("Please select a valid client."),
+  frequency: z.enum(["weekly", "monthly", "quarterly", "yearly"]),
+  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Start date must be in YYYY-MM-DD format."),
+  nextRunDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Next run date must be in YYYY-MM-DD format."),
+  endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "End date must be in YYYY-MM-DD format.").optional().or(z.literal("")),
+  items: z.array(lineItemSchema).min(1, "Recurring invoice must contain at least one line item."),
+  notes: z.string().trim().max(500).optional().or(z.literal("")),
+  terms: z.string().trim().max(500).optional().or(z.literal(""))
+});
+var adminUpdateTenantSchema = z.object({
+  subscriptionPlan: z.enum(["trial_15_days", "starter_299", "pro_499"]).optional(),
+  subscriptionStatus: z.enum(["trial", "active", "expired", "inactive", "suspended"]).optional(),
+  extendDays: z.coerce.number().int().min(1, "Days must be at least 1.").max(365, "Cannot extend by more than 365 days at once.").optional()
+});
+
 // src/routes/user.routes.ts
 var router = Router();
 router.use(requireAuth);
 router.get("/profile", cacheResponse("profile", 300), getUserProfile);
-router.put("/profile", putUserProfile);
+router.put("/profile", validateBody(updateProfileSchema), putUserProfile);
 router.post("/reset", resetUserData);
 router.post("/cache/reset", resetUserCache);
 router.post("/plan-request", submitPlanRequest);
@@ -1565,8 +1802,8 @@ var removeClient = asyncHandler(async (req, res) => {
 var router2 = Router2();
 router2.use(requireAuth);
 router2.get("/", cacheResponse("clients", 180), getClients);
-router2.post("/", postClient);
-router2.put("/:id", putClient);
+router2.post("/", validateBody(createClientSchema), postClient);
+router2.put("/:id", validateBody(updateClientSchema), putClient);
 router2.patch("/:id/toggle-status", toggleClient);
 router2.post("/:id/toggle-status", toggleClient);
 router2.delete("/:id", removeClient);
@@ -1779,16 +2016,31 @@ async function createInvoiceService(userId, data) {
   if (!data.invoiceNumber || !data.invoiceNumber.trim()) {
     throw new BadRequestError("Invoice number is required.");
   }
-  if (!data.items || !Array.isArray(data.items) || data.items.length === 0) {
-    throw new BadRequestError("At least one line item is required on the invoice.");
-  }
+  const itemsList = Array.isArray(data.items) ? data.items : [];
+  const computedSubtotal = itemsList.reduce((acc, item) => {
+    const qty = Number(item.quantity) || 0;
+    const rate = Number(item.rate) || 0;
+    return acc + (Number(item.amount) || qty * rate);
+  }, 0);
+  const subtotalVal = data.subtotal !== void 0 && Number(data.subtotal) > 0 ? Number(data.subtotal) : computedSubtotal;
+  const taxRateVal = Number(data.taxRate) || 0;
+  const taxAmountVal = data.taxAmount !== void 0 && Number(data.taxAmount) >= 0 ? Number(data.taxAmount) : subtotalVal * taxRateVal / 100;
+  const discountVal = Number(data.discountAmount) || 0;
+  const tdsVal = Number(data.tdsAmount) || 0;
+  const computedTotal = Math.max(0, subtotalVal + taxAmountVal - discountVal - tdsVal);
+  const totalAmountVal = data.totalAmount !== void 0 && Number(data.totalAmount) > 0 ? Number(data.totalAmount) : computedTotal;
   return await createInvoice(userId, {
     ...data,
     clientId,
     issueDate: data.issueDate || (/* @__PURE__ */ new Date()).toISOString().split("T")[0],
     dueDate: data.dueDate || (/* @__PURE__ */ new Date()).toISOString().split("T")[0],
-    subtotal: String(data.subtotal || "0.00"),
-    totalAmount: String(data.totalAmount || "0.00")
+    subtotal: subtotalVal.toFixed(2),
+    taxRate: taxRateVal.toFixed(2),
+    taxAmount: taxAmountVal.toFixed(2),
+    tdsRate: (Number(data.tdsRate) || 0).toFixed(2),
+    tdsAmount: tdsVal.toFixed(2),
+    discountAmount: discountVal.toFixed(2),
+    totalAmount: totalAmountVal.toFixed(2)
   });
 }
 async function updateInvoiceStatusService(userId, invoiceId, status, paidAmount) {
@@ -1932,7 +2184,7 @@ router3.get("/public/:invoiceNumber", publicPayLimiter, cacheResponse("invoice-p
 router3.use(requireAuth);
 router3.get("/", cacheResponse("invoices", 120), getInvoices);
 router3.get("/:id", cacheResponse("invoice-detail", 120), getInvoice);
-router3.post("/", postInvoice);
+router3.post("/", validateBody(createInvoiceSchema), postInvoice);
 router3.put("/:id/status", putInvoiceStatus);
 router3.delete("/:id", removeInvoice);
 var invoices_routes_default = router3;
@@ -2005,7 +2257,7 @@ var postPayment = asyncHandler(async (req, res) => {
 var router4 = Router4();
 router4.use(requireAuth);
 router4.get("/", cacheResponse("payments", 180), getPayments);
-router4.post("/", postPayment);
+router4.post("/", validateBody(recordPaymentSchema), postPayment);
 var payments_routes_default = router4;
 
 // src/routes/reminders.routes.ts
@@ -2174,27 +2426,33 @@ var sendReminder = asyncHandler(async (req, res) => {
     totalAmount,
     dueDate,
     messageContent,
+    customMessage,
     recipientPhone,
     sendMethod,
     pdfUrl,
     sendAsDocument
   } = req.body;
   const parsedInvoiceId = parseInt(String(invoiceId), 10);
-  const parsedClientId = parseInt(String(clientId), 10);
-  if (isNaN(parsedInvoiceId) || isNaN(parsedClientId)) {
-    throw new BadRequestError("Valid invoiceId and clientId are required.");
-  }
-  if (!messageContent || !messageContent.trim()) {
-    throw new BadRequestError("Reminder message content cannot be empty.");
-  }
-  if (!recipientPhone || !recipientPhone.trim()) {
-    throw new BadRequestError("Recipient WhatsApp phone number is required.");
+  if (isNaN(parsedInvoiceId) || parsedInvoiceId <= 0) {
+    throw new BadRequestError("Valid invoiceId is required.");
   }
   const invoice = await getInvoiceById(userId, parsedInvoiceId);
   if (!invoice) {
     throw new NotFoundError("Invoice not found or does not belong to your business account.");
   }
-  const cleanPhone = normalizeIndianPhoneNumber(recipientPhone);
+  const parsedClientId = clientId ? parseInt(String(clientId), 10) : invoice.clientId;
+  if (isNaN(parsedClientId) || parsedClientId <= 0) {
+    throw new BadRequestError("Valid clientId is required.");
+  }
+  const finalMessage = (messageContent || customMessage || "").trim();
+  if (!finalMessage) {
+    throw new BadRequestError("Reminder message content cannot be empty.");
+  }
+  const targetPhone = (recipientPhone || invoice.client?.phone || "").trim();
+  if (!targetPhone) {
+    throw new BadRequestError("Recipient WhatsApp phone number is required.");
+  }
+  const cleanPhone = normalizeIndianPhoneNumber(targetPhone);
   let deliveryStatus = "sent";
   let directApiSent = false;
   let apiResponse = null;
@@ -2208,7 +2466,7 @@ var sendReminder = asyncHandler(async (req, res) => {
     }
     const sendResult = await sendWhatsAppMessage({
       recipientPhone: cleanPhone,
-      messageContent,
+      messageContent: finalMessage,
       recipientName,
       invoiceNumber: invoiceNumber || invoice.invoiceNumber,
       invoiceId: parsedInvoiceId,
@@ -2228,12 +2486,12 @@ var sendReminder = asyncHandler(async (req, res) => {
     invoiceId: parsedInvoiceId,
     clientId: parsedClientId,
     templateType,
-    messageContent,
+    messageContent: finalMessage,
     recipientPhone: cleanPhone,
     status: deliveryStatus
   });
   await invalidateUserCache(userId, "reminders");
-  const whatsappUrl = generateWaMeUrl(cleanPhone, messageContent);
+  const whatsappUrl = generateWaMeUrl(cleanPhone, finalMessage);
   return ApiResponse.success(res, {
     directApiSent,
     deliveryStatus,
@@ -2247,7 +2505,7 @@ var sendReminder = asyncHandler(async (req, res) => {
 var router5 = Router5();
 router5.use(requireAuth);
 router5.get("/logs", cacheResponse("reminders", 180), getReminderLogs);
-router5.post("/send", remindersLimiter, sendReminder);
+router5.post("/send", remindersLimiter, validateBody(sendReminderSchema), sendReminder);
 var reminders_routes_default = router5;
 
 // src/routes/analytics.routes.ts
@@ -2446,7 +2704,7 @@ router7.use(requireAuth);
 router7.use(requireSuperAdmin);
 router7.get("/tenants", cacheResponse("admin:tenants", 120), getTenants);
 router7.post("/tenants", postTenant);
-router7.put("/tenants/:id/subscription", putTenantSubscription);
+router7.put("/tenants/:id/subscription", validateBody(adminUpdateTenantSchema), putTenantSubscription);
 router7.get("/plan-requests", cacheResponse("admin:plan-requests", 120), getPlanRequestsList);
 router7.put("/plan-requests/:id", putPlanRequestStatus);
 router7.post("/cache/flush", flushGlobalCache);
@@ -2722,7 +2980,7 @@ var triggerManualRun = asyncHandler(async (req, res) => {
 var router8 = Router8();
 router8.use(requireAuth);
 router8.get("/", cacheResponse("recurring", 180), getRecurringProfiles);
-router8.post("/", createRecurringProfile);
+router8.post("/", validateBody(createRecurringSchema), createRecurringProfile);
 router8.put("/:id/toggle", toggleRecurringProfile);
 router8.delete("/:id", deleteRecurringProfile);
 router8.post("/trigger-run", triggerManualRun);

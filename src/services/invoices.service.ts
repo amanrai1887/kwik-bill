@@ -56,17 +56,37 @@ export async function createInvoiceService(userId: number, data: any) {
     throw new BadRequestError("Invoice number is required.");
   }
 
-  if (!data.items || !Array.isArray(data.items) || data.items.length === 0) {
-    throw new BadRequestError("At least one line item is required on the invoice.");
-  }
+  const itemsList = Array.isArray(data.items) ? data.items : [];
+  const computedSubtotal = itemsList.reduce((acc: number, item: any) => {
+    const qty = Number(item.quantity) || 0;
+    const rate = Number(item.rate) || 0;
+    return acc + (Number(item.amount) || (qty * rate));
+  }, 0);
+
+  const subtotalVal = data.subtotal !== undefined && Number(data.subtotal) > 0 ? Number(data.subtotal) : computedSubtotal;
+  const taxRateVal = Number(data.taxRate) || 0;
+  const taxAmountVal = data.taxAmount !== undefined && Number(data.taxAmount) >= 0 
+    ? Number(data.taxAmount) 
+    : (subtotalVal * taxRateVal) / 100;
+  const discountVal = Number(data.discountAmount) || 0;
+  const tdsVal = Number(data.tdsAmount) || 0;
+  const computedTotal = Math.max(0, subtotalVal + taxAmountVal - discountVal - tdsVal);
+  const totalAmountVal = data.totalAmount !== undefined && Number(data.totalAmount) > 0 
+    ? Number(data.totalAmount) 
+    : computedTotal;
 
   return await createInvoice(userId, {
     ...data,
     clientId,
     issueDate: data.issueDate || new Date().toISOString().split('T')[0],
     dueDate: data.dueDate || new Date().toISOString().split('T')[0],
-    subtotal: String(data.subtotal || '0.00'),
-    totalAmount: String(data.totalAmount || '0.00'),
+    subtotal: subtotalVal.toFixed(2),
+    taxRate: taxRateVal.toFixed(2),
+    taxAmount: taxAmountVal.toFixed(2),
+    tdsRate: (Number(data.tdsRate) || 0).toFixed(2),
+    tdsAmount: tdsVal.toFixed(2),
+    discountAmount: discountVal.toFixed(2),
+    totalAmount: totalAmountVal.toFixed(2),
   });
 }
 
