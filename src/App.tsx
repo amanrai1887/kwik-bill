@@ -134,6 +134,11 @@ function AppContent() {
       setReminderLogs([]);
       localStorage.removeItem('kwikbill_current_view');
       localStorage.removeItem('kwikbill_active_tab');
+      localStorage.removeItem('kwikbill_cached_profile');
+      localStorage.removeItem('kwikbill_cached_clients');
+      localStorage.removeItem('kwikbill_cached_invoices');
+      localStorage.removeItem('kwikbill_cached_analytics');
+      localStorage.removeItem('kwikbill_cached_logs');
     } else if (!prevUserRef.current && user) {
       // User just logged in: navigate to workspace
       setCurrentView('app');
@@ -141,17 +146,67 @@ function AppContent() {
     prevUserRef.current = user;
   }, [user]);
 
-  // Application Data States
-  const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [clients, setClients] = useState<Client[]>([]);
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
-  const [reminderLogs, setReminderLogs] = useState<ReminderLog[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  // Application Data States (Initialized from instant SWR local cache)
+  const [profile, setProfile] = useState<UserProfile | null>(() => {
+    try {
+      const saved = localStorage.getItem('kwikbill_cached_profile');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
 
-  // Load all data from PostgreSQL via backend API
-  const loadAllData = useCallback(async () => {
-    setIsLoading(true);
+  const [clients, setClients] = useState<Client[]>(() => {
+    try {
+      const saved = localStorage.getItem('kwikbill_cached_clients');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [invoices, setInvoices] = useState<Invoice[]>(() => {
+    try {
+      const saved = localStorage.getItem('kwikbill_cached_invoices');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [analytics, setAnalytics] = useState<AnalyticsData | null>(() => {
+    try {
+      const saved = localStorage.getItem('kwikbill_cached_analytics');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  const [reminderLogs, setReminderLogs] = useState<ReminderLog[]>(() => {
+    try {
+      const saved = localStorage.getItem('kwikbill_cached_logs');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  // Only show full skeleton loader if user has zero cached state
+  const [isLoading, setIsLoading] = useState<boolean>(() => {
+    try {
+      const hasCachedState = Boolean(localStorage.getItem('kwikbill_cached_profile') || localStorage.getItem('kwikbill_cached_invoices'));
+      return !hasCachedState;
+    } catch {
+      return true;
+    }
+  });
+
+  // Load all data from PostgreSQL / Redis cache via backend API
+  const loadAllData = useCallback(async (showSkeleton = false) => {
+    if (showSkeleton) {
+      setIsLoading(true);
+    }
     try {
       const [profileRes, clientsRes, invoicesRes, analyticsRes, logsRes] = await Promise.all([
         fetchProfile().catch((err) => {
@@ -167,17 +222,39 @@ function AppContent() {
       ]);
 
       const loadedProfile = profileRes?.user || profileRes?.data?.user || (profileRes?.id ? profileRes : null);
-      if (loadedProfile) setProfile(loadedProfile);
+      if (loadedProfile) {
+        setProfile(loadedProfile);
+        try { localStorage.setItem('kwikbill_cached_profile', JSON.stringify(loadedProfile)); } catch {}
+      }
 
-      if (Array.isArray(clientsRes?.clients)) setClients(clientsRes.clients);
-      else if (Array.isArray(clientsRes)) setClients(clientsRes);
+      if (Array.isArray(clientsRes?.clients)) {
+        setClients(clientsRes.clients);
+        try { localStorage.setItem('kwikbill_cached_clients', JSON.stringify(clientsRes.clients)); } catch {}
+      } else if (Array.isArray(clientsRes)) {
+        setClients(clientsRes);
+        try { localStorage.setItem('kwikbill_cached_clients', JSON.stringify(clientsRes)); } catch {}
+      }
 
-      if (Array.isArray(invoicesRes?.invoices)) setInvoices(invoicesRes.invoices);
-      else if (Array.isArray(invoicesRes)) setInvoices(invoicesRes);
+      if (Array.isArray(invoicesRes?.invoices)) {
+        setInvoices(invoicesRes.invoices);
+        try { localStorage.setItem('kwikbill_cached_invoices', JSON.stringify(invoicesRes.invoices)); } catch {}
+      } else if (Array.isArray(invoicesRes)) {
+        setInvoices(invoicesRes);
+        try { localStorage.setItem('kwikbill_cached_invoices', JSON.stringify(invoicesRes)); } catch {}
+      }
 
-      if (analyticsRes) setAnalytics(analyticsRes);
-      if (Array.isArray(logsRes?.logs)) setReminderLogs(logsRes.logs);
-      else if (Array.isArray(logsRes)) setReminderLogs(logsRes);
+      if (analyticsRes) {
+        setAnalytics(analyticsRes);
+        try { localStorage.setItem('kwikbill_cached_analytics', JSON.stringify(analyticsRes)); } catch {}
+      }
+
+      if (Array.isArray(logsRes?.logs)) {
+        setReminderLogs(logsRes.logs);
+        try { localStorage.setItem('kwikbill_cached_logs', JSON.stringify(logsRes.logs)); } catch {}
+      } else if (Array.isArray(logsRes)) {
+        setReminderLogs(logsRes);
+        try { localStorage.setItem('kwikbill_cached_logs', JSON.stringify(logsRes)); } catch {}
+      }
 
       return loadedProfile;
     } catch (err) {
@@ -192,7 +269,7 @@ function AppContent() {
     if (currentView === 'app') {
       loadAllData();
     }
-  }, [loadAllData, user, currentView]);
+  }, [loadAllData, currentView]);
 
   // Re-verify profile when tab comes into focus
   useEffect(() => {

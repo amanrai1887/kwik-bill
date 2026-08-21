@@ -17,6 +17,8 @@ export class ApiClientError extends Error {
   }
 }
 
+let cachedToken: { token: string; expiresAt: number; uid: string } | null = null;
+
 async function getAuthHeaders(): Promise<Record<string, string>> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -25,8 +27,14 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
   const currentUser = auth.currentUser;
   if (currentUser) {
     try {
-      const token = await currentUser.getIdToken();
-      headers['Authorization'] = `Bearer ${token}`;
+      const now = Date.now();
+      if (cachedToken && cachedToken.uid === currentUser.uid && cachedToken.expiresAt > now) {
+        headers['Authorization'] = `Bearer ${cachedToken.token}`;
+      } else {
+        const token = await currentUser.getIdToken();
+        cachedToken = { token, expiresAt: now + 50 * 60 * 1000, uid: currentUser.uid };
+        headers['Authorization'] = `Bearer ${token}`;
+      }
     } catch (e) {
       console.warn('Could not retrieve Firebase token, proceeding with demo headers', e);
     }
@@ -39,37 +47,57 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
   return headers;
 }
 
+const inFlightRequests = new Map<string, Promise<any>>();
+
 /**
- * Centralized fetch helper for type-safe requests and structured error handling
+ * Centralized fetch helper for type-safe requests, in-flight deduplication, and structured error handling
  */
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  const headers = await getAuthHeaders();
-  const res = await fetch(endpoint, {
-    ...options,
-    headers: {
-      ...headers,
-      ...(options.headers || {}),
-    },
-  });
+  const isGet = !options.method || options.method === 'GET';
+  const requestKey = isGet ? `${endpoint}:${auth.currentUser?.uid || 'anon'}` : null;
 
-  let data: any;
-  try {
-    data = await res.json();
-  } catch {
-    data = null;
+  if (requestKey && inFlightRequests.has(requestKey)) {
+    return inFlightRequests.get(requestKey) as Promise<T>;
   }
 
-  if (!res.ok) {
-    const errorMsg =
-      data?.error?.message ||
-      data?.error ||
-      data?.message ||
-      `HTTP Error ${res.status}: ${res.statusText}`;
-    const errorCode = data?.error?.code || `HTTP_${res.status}`;
-    throw new ApiClientError(errorMsg, res.status, errorCode, data?.error?.details);
+  const promise = (async () => {
+    const headers = await getAuthHeaders();
+    const res = await fetch(endpoint, {
+      ...options,
+      headers: {
+        ...headers,
+        ...(options.headers || {}),
+      },
+    });
+
+    let data: any;
+    try {
+      data = await res.json();
+    } catch {
+      data = null;
+    }
+
+    if (!res.ok) {
+      const errorMsg =
+        data?.error?.message ||
+        data?.error ||
+        data?.message ||
+        `HTTP Error ${res.status}: ${res.statusText}`;
+      const errorCode = data?.error?.code || `HTTP_${res.status}`;
+      throw new ApiClientError(errorMsg, res.status, errorCode, data?.error?.details);
+    }
+
+    return data as T;
+  })();
+
+  if (requestKey) {
+    inFlightRequests.set(requestKey, promise);
+    promise.finally(() => {
+      inFlightRequests.delete(requestKey);
+    });
   }
 
-  return data as T;
+  return promise;
 }
 
 // User & Workspace Profile
