@@ -1816,6 +1816,31 @@ import { Router as Router3 } from "express";
 init_schema();
 import { eq as eq6, and as and2, desc as desc3, or, sql } from "drizzle-orm";
 import crypto from "crypto";
+function normalizeInvoiceFinancials(invoice) {
+  if (!invoice) return invoice;
+  const items = Array.isArray(invoice.items) ? invoice.items : [];
+  const computedSubtotal = items.reduce((acc, it) => {
+    const qty = Number(it.quantity) || 0;
+    const rate = Number(it.rate) || 0;
+    return acc + (Number(it.amount) || qty * rate);
+  }, 0);
+  const rawSubtotal = parseFloat(invoice.subtotal);
+  const subtotal = !isNaN(rawSubtotal) && rawSubtotal > 0 ? rawSubtotal : computedSubtotal;
+  const taxRate = parseFloat(invoice.taxRate) || 0;
+  const rawTaxAmount = parseFloat(invoice.taxAmount);
+  const taxAmount = !isNaN(rawTaxAmount) && rawTaxAmount > 0 ? rawTaxAmount : subtotal * taxRate / 100;
+  const discountAmount = parseFloat(invoice.discountAmount) || 0;
+  const tdsAmount = parseFloat(invoice.tdsAmount) || 0;
+  const computedTotal = Math.max(0, subtotal + taxAmount - discountAmount - tdsAmount);
+  const rawTotal = parseFloat(invoice.totalAmount);
+  const totalAmount = !isNaN(rawTotal) && rawTotal > 0 ? rawTotal : computedTotal;
+  return {
+    ...invoice,
+    subtotal: subtotal.toFixed(2),
+    taxAmount: taxAmount.toFixed(2),
+    totalAmount: totalAmount.toFixed(2)
+  };
+}
 async function getInvoicesByUserId(userId, options) {
   try {
     const conditions = [eq6(invoices.userId, userId)];
@@ -1844,7 +1869,7 @@ async function getInvoicesByUserId(userId, options) {
     }
     const list = await query;
     return list.map((item) => ({
-      ...item.invoice,
+      ...normalizeInvoiceFinancials(item.invoice),
       client: item.client
     }));
   } catch (error) {
@@ -1862,7 +1887,7 @@ async function getInvoiceById(userId, invoiceId) {
     const paymentRows = await db.select().from(payments).where(and2(eq6(payments.invoiceId, invoiceId), eq6(payments.userId, userId))).orderBy(desc3(payments.createdAt));
     const reminderRows = await db.select().from(reminderLogs).where(and2(eq6(reminderLogs.invoiceId, invoiceId), eq6(reminderLogs.userId, userId))).orderBy(desc3(reminderLogs.sentAt));
     return {
-      ...rows[0].invoice,
+      ...normalizeInvoiceFinancials(rows[0].invoice),
       client: rows[0].client,
       payments: paymentRows,
       reminderLogs: reminderRows
@@ -1897,7 +1922,7 @@ async function getInvoiceByNumberPublic(identifier) {
     }).from(invoices).innerJoin(clients, eq6(invoices.clientId, clients.id)).innerJoin(users3, eq6(invoices.userId, users3.id)).where(or(eq6(invoices.shareToken, identifier), eq6(invoices.invoiceNumber, identifier)));
     if (rows.length === 0) return null;
     return {
-      ...rows[0].invoice,
+      ...normalizeInvoiceFinancials(rows[0].invoice),
       client: rows[0].client,
       merchant: rows[0].merchant
     };

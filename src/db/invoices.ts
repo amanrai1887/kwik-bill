@@ -9,6 +9,37 @@ export interface InvoiceQueryOptions {
   search?: string;
 }
 
+export function normalizeInvoiceFinancials(invoice: any) {
+  if (!invoice) return invoice;
+  const items = Array.isArray(invoice.items) ? invoice.items : [];
+  const computedSubtotal = items.reduce((acc: number, it: any) => {
+    const qty = Number(it.quantity) || 0;
+    const rate = Number(it.rate) || 0;
+    return acc + (Number(it.amount) || (qty * rate));
+  }, 0);
+
+  const rawSubtotal = parseFloat(invoice.subtotal);
+  const subtotal = !isNaN(rawSubtotal) && rawSubtotal > 0 ? rawSubtotal : computedSubtotal;
+
+  const taxRate = parseFloat(invoice.taxRate) || 0;
+  const rawTaxAmount = parseFloat(invoice.taxAmount);
+  const taxAmount = !isNaN(rawTaxAmount) && rawTaxAmount > 0 ? rawTaxAmount : (subtotal * taxRate) / 100;
+
+  const discountAmount = parseFloat(invoice.discountAmount) || 0;
+  const tdsAmount = parseFloat(invoice.tdsAmount) || 0;
+  const computedTotal = Math.max(0, subtotal + taxAmount - discountAmount - tdsAmount);
+
+  const rawTotal = parseFloat(invoice.totalAmount);
+  const totalAmount = !isNaN(rawTotal) && rawTotal > 0 ? rawTotal : computedTotal;
+
+  return {
+    ...invoice,
+    subtotal: subtotal.toFixed(2),
+    taxAmount: taxAmount.toFixed(2),
+    totalAmount: totalAmount.toFixed(2),
+  };
+}
+
 export async function getInvoicesByUserId(userId: number, options?: InvoiceQueryOptions) {
   try {
     const conditions = [eq(invoices.userId, userId)];
@@ -48,7 +79,7 @@ export async function getInvoicesByUserId(userId: number, options?: InvoiceQuery
     const list = await query;
 
     return list.map((item: any) => ({
-      ...item.invoice,
+      ...normalizeInvoiceFinancials(item.invoice),
       client: item.client,
     }));
   } catch (error) {
@@ -83,7 +114,7 @@ export async function getInvoiceById(userId: number, invoiceId: number) {
       .orderBy(desc(reminderLogs.sentAt));
 
     return {
-      ...rows[0].invoice,
+      ...normalizeInvoiceFinancials(rows[0].invoice),
       client: rows[0].client,
       payments: paymentRows,
       reminderLogs: reminderRows,
@@ -129,7 +160,7 @@ export async function getInvoiceByNumberPublic(identifier: string) {
     if (rows.length === 0) return null;
 
     return {
-      ...rows[0].invoice,
+      ...normalizeInvoiceFinancials(rows[0].invoice),
       client: rows[0].client,
       merchant: rows[0].merchant,
     };

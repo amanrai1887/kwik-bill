@@ -70,7 +70,14 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
   const companyName = invoice.client?.companyName || '';
   const clientPhone = (invoice.client?.phone || '').replace(/\D/g, '');
   const invoiceNumber = invoice.invoiceNumber;
-  const balanceDue = Math.max(0, (parseFloat(invoice.totalAmount) || 0) - (parseFloat(invoice.paidAmount) || 0));
+
+  const itemsSubtotal = Array.isArray(invoice.items)
+    ? invoice.items.reduce((sum: number, item: any) => sum + (parseFloat(item.amount) || ((parseFloat(item.quantity) || 0) * (parseFloat(item.rate) || 0))), 0)
+    : 0;
+  const rawTotal = parseFloat(invoice.totalAmount) || 0;
+  const totalAmount = rawTotal > 0 ? rawTotal : itemsSubtotal;
+  const paidAmount = parseFloat(invoice.paidAmount) || 0;
+  const balanceDue = Math.max(0, totalAmount - paidAmount);
   const amountFormatted = `₹${balanceDue.toLocaleString('en-IN')}`;
   const dueDate = invoice.dueDate;
   const upiId = profile?.upiId || 'speedytrans@okaxis';

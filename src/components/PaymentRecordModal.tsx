@@ -19,7 +19,11 @@ export const PaymentRecordModal: React.FC<PaymentRecordModalProps> = ({
 }) => {
   if (!isOpen || !invoice) return null;
 
-  const total = parseFloat(invoice.totalAmount) || 0;
+  const itemsSubtotal = Array.isArray(invoice.items)
+    ? invoice.items.reduce((sum: number, item: any) => sum + (parseFloat(item.amount) || ((parseFloat(item.quantity) || 0) * (parseFloat(item.rate) || 0))), 0)
+    : 0;
+  const rawTotal = parseFloat(invoice.totalAmount) || 0;
+  const total = rawTotal > 0 ? rawTotal : itemsSubtotal;
   const alreadyPaid = parseFloat(invoice.paidAmount) || 0;
   const balanceDue = Math.max(0, total - alreadyPaid);
 

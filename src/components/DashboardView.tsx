@@ -363,6 +363,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   const isOverdue = inv.status === 'overdue';
                   const isPaid = inv.status === 'paid';
                   const isPartial = inv.status === 'partial';
+                  const rawTotal = parseFloat(inv.totalAmount) || 0;
+                  const itemsSubtotal = Array.isArray(inv.items)
+                    ? inv.items.reduce((sum: number, item: any) => sum + (parseFloat(item.amount) || ((parseFloat(item.quantity) || 0) * (parseFloat(item.rate) || 0))), 0)
+                    : 0;
+                  const totalAmount = rawTotal > 0 ? rawTotal : itemsSubtotal;
 
                   return (
                     <tr key={inv.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
@@ -377,7 +382,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                         {inv.dueDate}
                       </td>
                       <td className="py-3 px-4 font-bold text-slate-900 dark:text-white font-mono">
-                        {formatCurrency(inv.totalAmount)}
+                        {formatCurrency(totalAmount)}
                       </td>
                       <td className="py-3 px-4">
                         <span
