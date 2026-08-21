@@ -65,7 +65,8 @@ export const requireAuth = async (
     if (isWriteMethod) {
       const url = req.originalUrl || req.url || '';
       const isPlanRequest = req.method === 'POST' && url.includes('/plan-request');
-      if (!isPlanRequest) {
+      const isCacheReset = req.method === 'POST' && url.includes('/cache/reset');
+      if (!isPlanRequest && !isCacheReset) {
         return res.status(403).json({
           success: false,
           error: {

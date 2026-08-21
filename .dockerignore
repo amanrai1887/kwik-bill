@@ -3,3 +3,8 @@ dist
 .git
 .env
 .DS_Store
+mobile
+build_apk
+.idea
+.agents
+

@@ -7,12 +7,13 @@ import {
   triggerManualRun,
 } from '../controllers/recurring.controller.ts';
 import { requireAuth } from '../middleware/auth.ts';
+import { cacheResponse } from '../middleware/cacheMiddleware.ts';
 
 const router = Router();
 
 router.use(requireAuth);
 
-router.get('/', getRecurringProfiles);
+router.get('/', cacheResponse('recurring', 180), getRecurringProfiles);
 router.post('/', createRecurringProfile);
 router.put('/:id/toggle', toggleRecurringProfile);
 router.delete('/:id', deleteRecurringProfile);

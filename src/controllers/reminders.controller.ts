@@ -4,6 +4,7 @@ import { logWhatsAppReminder, getReminderLogsByUserId } from "../db/reminders.ts
 import { sendWhatsAppMessage, normalizeIndianPhoneNumber, generateWaMeUrl } from "../services/whatsapp.service.ts";
 import { getInvoiceById } from "../db/invoices.ts";
 import { asyncHandler, ApiResponse, BadRequestError, NotFoundError } from "../utils/apiResponse.ts";
+import { invalidateUserCache } from "../lib/redis.ts";
 
 export const getReminderLogs = asyncHandler(async (req: AuthRequest, res: Response) => {
   const userId = req.dbUser.id;
@@ -94,6 +95,8 @@ export const sendReminder = asyncHandler(async (req: AuthRequest, res: Response)
     recipientPhone: cleanPhone,
     status: deliveryStatus,
   });
+
+  await invalidateUserCache(userId, 'reminders');
 
   const whatsappUrl = generateWaMeUrl(cleanPhone, messageContent);
 

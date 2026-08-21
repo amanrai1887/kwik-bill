@@ -42,20 +42,23 @@ async function startServer() {
       res.on("finish", () => {
         const duration = Date.now() - startTime;
         const status = res.statusCode;
+        const cacheHeader = res.getHeader("X-Cache");
 
         // ANSI color codes
         const cyan = "\x1b[36m";
         const yellow = "\x1b[33m";
         const green = "\x1b[32m";
         const red = "\x1b[31m";
+        const magenta = "\x1b[35m";
         const reset = "\x1b[0m";
         const gray = "\x1b[90m";
 
         const statusColor = status >= 500 ? red : status >= 400 ? yellow : green;
         const timeColor = duration > 500 ? red : duration > 200 ? yellow : gray;
+        const cacheBadge = cacheHeader === "HIT" ? ` ${magenta}[CACHED]${reset}` : "";
 
         console.log(
-          `${gray}[${timestamp}]${reset} ${cyan}${method}${reset} ${req.originalUrl} ${statusColor}${status}${reset} ${timeColor}${duration}ms${reset}`
+          `${gray}[${timestamp}]${reset} ${cyan}${method}${reset} ${req.originalUrl} ${statusColor}${status}${reset} ${timeColor}${duration}ms${reset}${cacheBadge}`
         );
       });
     }

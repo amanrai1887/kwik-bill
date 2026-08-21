@@ -31,6 +31,12 @@ export const config = {
     projectId: process.env.FIREBASE_PROJECT_ID || 'invoice-saas-app-fc503',
   },
 
+  // Redis Cache
+  redis: {
+    url: process.env.REDIS_URL || 'redis://localhost:6379',
+    enabled: process.env.REDIS_ENABLED !== 'false',
+  },
+
   // Security / Demo Mode
   allowDemoAuth: process.env.ALLOW_DEMO_AUTH !== 'false',
 };

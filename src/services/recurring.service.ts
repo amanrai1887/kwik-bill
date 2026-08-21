@@ -1,6 +1,7 @@
 import { createInvoice } from '../db/invoices.ts';
 import { getDueRecurringProfiles, updateRecurringProfileNextRun } from '../db/recurring.ts';
 import { sendWhatsAppMessage, normalizeIndianPhoneNumber } from './whatsapp.service.ts';
+import { invalidateUserCache } from '../lib/redis.ts';
 
 // Helper to compute next run date given current run date and frequency
 export function computeNextRunDate(currentDateStr: string, frequency: string, interval = 1): string {
@@ -132,6 +133,9 @@ export async function processRecurringInvoices() {
         clientName: client.name,
         totalAmount: p.totalAmount,
       });
+
+      // Invalidate merchant's cache
+      invalidateUserCache(p.userId, 'invoices', 'recurring', 'analytics').catch(() => {});
 
       console.log(`[Auto-Billing Engine] Generated recurring invoice ${invNumber} for ${client.name} (₹${p.totalAmount})`);
     }

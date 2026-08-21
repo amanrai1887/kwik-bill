@@ -354,6 +354,11 @@ var config3 = {
   firebase: {
     projectId: process.env.FIREBASE_PROJECT_ID || "invoice-saas-app-fc503"
   },
+  // Redis Cache
+  redis: {
+    url: process.env.REDIS_URL || "redis://localhost:6379",
+    enabled: process.env.REDIS_ENABLED !== "false"
+  },
   // Security / Demo Mode
   allowDemoAuth: process.env.ALLOW_DEMO_AUTH !== "false"
 };
@@ -735,6 +740,186 @@ function globalErrorHandler(err, req, res, next) {
   });
 }
 
+// src/lib/redis.ts
+import Redis from "ioredis";
+var isRedisConnected = false;
+var hasLoggedFailure = false;
+var createRedisClient = () => {
+  if (!config3.redis.enabled) {
+    return null;
+  }
+  if (global._redisClient) {
+    return global._redisClient;
+  }
+  try {
+    const client = new Redis(config3.redis.url, {
+      maxRetriesPerRequest: 1,
+      retryStrategy(times) {
+        if (times > 5) {
+          if (!hasLoggedFailure) {
+            console.warn("[Redis] Max reconnect attempts reached. Operating in cache-bypass mode.");
+            hasLoggedFailure = true;
+          }
+          return null;
+        }
+        return Math.min(times * 500, 2e3);
+      },
+      connectTimeout: 5e3,
+      lazyConnect: false,
+      enableOfflineQueue: false
+    });
+    client.on("connect", () => {
+      isRedisConnected = true;
+      hasLoggedFailure = false;
+      console.log(`[Redis] Connected successfully to ${config3.redis.url.replace(/\/\/[^:]+:[^@]+@/, "//***:***@")}`);
+    });
+    client.on("ready", () => {
+      isRedisConnected = true;
+    });
+    client.on("error", (err) => {
+      isRedisConnected = false;
+      if (!hasLoggedFailure) {
+        console.warn(`[Redis] Connection warning (${err?.code || err?.message || "Offline"}). Falling back to direct database.`);
+        hasLoggedFailure = true;
+      }
+    });
+    client.on("close", () => {
+      isRedisConnected = false;
+    });
+    global._redisClient = client;
+    return client;
+  } catch (err) {
+    console.warn("[Redis] Failed to initialize Redis client:", err);
+    return null;
+  }
+};
+var redis = createRedisClient();
+var isCacheAvailable = () => {
+  return isRedisConnected && redis !== null && redis.status === "ready";
+};
+async function getCache(key) {
+  if (!isCacheAvailable() || !redis) return null;
+  try {
+    const raw = await redis.get(key);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch (err) {
+    console.debug(`[Redis] getCache error for key "${key}":`, err);
+    return null;
+  }
+}
+async function setCache(key, data, ttlSeconds = 180) {
+  if (!isCacheAvailable() || !redis) return false;
+  try {
+    const serialized = JSON.stringify(data);
+    if (ttlSeconds > 0) {
+      await redis.set(key, serialized, "EX", ttlSeconds);
+    } else {
+      await redis.set(key, serialized);
+    }
+    return true;
+  } catch (err) {
+    console.debug(`[Redis] setCache error for key "${key}":`, err);
+    return false;
+  }
+}
+async function invalidatePattern(pattern) {
+  if (!isCacheAvailable() || !redis) return 0;
+  try {
+    let cursor = "0";
+    let deletedCount = 0;
+    do {
+      const [nextCursor, keys] = await redis.scan(cursor, "MATCH", pattern, "COUNT", 100);
+      cursor = nextCursor;
+      if (keys.length > 0) {
+        await redis.del(...keys);
+        deletedCount += keys.length;
+      }
+    } while (cursor !== "0");
+    return deletedCount;
+  } catch (err) {
+    console.debug(`[Redis] invalidatePattern error for "${pattern}":`, err);
+    return 0;
+  }
+}
+async function invalidateUserCache(userId, ...resources) {
+  if (!isCacheAvailable() || !redis || !userId) return;
+  try {
+    if (resources.length === 0) {
+      await invalidatePattern(`cache:${userId}:*`);
+    } else {
+      const tasks = resources.map((res) => invalidatePattern(`cache:${userId}:${res}*`));
+      await Promise.all(tasks);
+    }
+  } catch (err) {
+    console.debug(`[Redis] invalidateUserCache error for user ${userId}:`, err);
+  }
+}
+async function invalidateAdminCache(...resources) {
+  if (!isCacheAvailable() || !redis) return;
+  try {
+    if (resources.length === 0) {
+      await invalidatePattern(`cache:admin:*`);
+    } else {
+      const tasks = resources.map((res) => invalidatePattern(`cache:admin:${res}*`));
+      await Promise.all(tasks);
+    }
+  } catch (err) {
+    console.debug(`[Redis] invalidateAdminCache error:`, err);
+  }
+}
+async function flushAllCache() {
+  if (!isCacheAvailable() || !redis) return false;
+  try {
+    await invalidatePattern("cache:*");
+    return true;
+  } catch (err) {
+    console.debug(`[Redis] flushAllCache error:`, err);
+    return false;
+  }
+}
+async function getCacheStats() {
+  const defaultStats = {
+    isConnected: false,
+    status: redis?.status || "disconnected",
+    keysCount: 0,
+    memoryUsed: "0 MB",
+    uptimeSeconds: 0,
+    redisVersion: "unknown"
+  };
+  if (!isCacheAvailable() || !redis) {
+    return defaultStats;
+  }
+  try {
+    const info = await redis.info();
+    const parseInfo = (section, key) => {
+      const match = section.match(new RegExp(`^${key}:(.+)$`, "m"));
+      return match ? match[1].trim() : "";
+    };
+    const redisVersion = parseInfo(info, "redis_version") || "unknown";
+    const usedMemoryHuman = parseInfo(info, "used_memory_human") || "0 MB";
+    const uptime = parseInt(parseInfo(info, "uptime_in_seconds") || "0", 10);
+    let cursor = "0";
+    let keysCount = 0;
+    do {
+      const [nextCursor, keys] = await redis.scan(cursor, "MATCH", "cache:*", "COUNT", 100);
+      cursor = nextCursor;
+      keysCount += keys.length;
+    } while (cursor !== "0");
+    return {
+      isConnected: true,
+      status: redis.status,
+      keysCount,
+      memoryUsed: usedMemoryHuman,
+      uptimeSeconds: uptime,
+      redisVersion
+    };
+  } catch (err) {
+    console.debug("[Redis] getCacheStats error:", err);
+    return defaultStats;
+  }
+}
+
 // src/controllers/user.controller.ts
 var getUserProfile = asyncHandler(async (req, res) => {
   const user = req.dbUser;
@@ -754,6 +939,7 @@ var putUserProfile = asyncHandler(async (req, res) => {
     }
   }
   const updated = await updateUserProfile(userId, payload);
+  await invalidateUserCache(userId, "profile");
   return ApiResponse.success(res, { user: updated });
 });
 var resetUserData = asyncHandler(async (req, res) => {
@@ -765,6 +951,7 @@ var resetUserData = asyncHandler(async (req, res) => {
     await tx.delete(invoices).where(eq3(invoices.userId, userId));
     await tx.delete(clients).where(eq3(clients.userId, userId));
   });
+  await invalidateUserCache(userId);
   return ApiResponse.success(res, { message: "Workspace successfully reset to a clean slate." });
 });
 
@@ -930,6 +1117,7 @@ var postTenant = asyncHandler(async (req, res) => {
     subscriptionStatus: "active",
     role: "subscriber"
   }).returning();
+  await invalidateAdminCache("tenants");
   return ApiResponse.success(res, { tenant: created[0] }, 201, "Tenant onboarded successfully");
 });
 var putTenantSubscription = asyncHandler(async (req, res) => {
@@ -939,6 +1127,10 @@ var putTenantSubscription = asyncHandler(async (req, res) => {
     throw new BadRequestError("Both plan and status are required.");
   }
   const updated = await updateTenantSubscription(tenantId, plan, status);
+  await Promise.all([
+    invalidateAdminCache("tenants"),
+    invalidateUserCache(tenantId, "profile")
+  ]);
   return ApiResponse.success(res, { tenant: updated });
 });
 var submitPlanRequest = asyncHandler(async (req, res) => {
@@ -956,6 +1148,7 @@ var submitPlanRequest = asyncHandler(async (req, res) => {
     requestedPlan,
     businessNeeds
   });
+  await invalidateAdminCache("plan-requests");
   sendAdminPlanRequestNotification({
     businessName,
     contactPerson,
@@ -981,8 +1174,35 @@ var putPlanRequestStatus = asyncHandler(async (req, res) => {
   const updated = await updatePlanRequestStatus(requestId, status);
   if (approveAsSubscriber && userId && requestedPlan) {
     await updateTenantSubscription(Number(userId), requestedPlan, "active");
+    await invalidateUserCache(Number(userId), "profile");
   }
+  await invalidateAdminCache("plan-requests", "tenants");
   return ApiResponse.success(res, { request: updated });
+});
+
+// src/controllers/cache.controller.ts
+var resetUserCache = asyncHandler(async (req, res) => {
+  const userId = req.dbUser?.id;
+  if (userId) {
+    await invalidateUserCache(userId);
+  }
+  return ApiResponse.success(res, {
+    message: "Cache successfully cleared for your workspace.",
+    userId,
+    timestamp: (/* @__PURE__ */ new Date()).toISOString()
+  });
+});
+var flushGlobalCache = asyncHandler(async (_req, res) => {
+  const flushed = await flushAllCache();
+  return ApiResponse.success(res, {
+    message: flushed ? "All system cache keys flushed successfully." : "Redis cache is offline or could not be flushed.",
+    flushed,
+    timestamp: (/* @__PURE__ */ new Date()).toISOString()
+  });
+});
+var getCacheHealthStats = asyncHandler(async (_req, res) => {
+  const stats = await getCacheStats();
+  return ApiResponse.success(res, { stats });
 });
 
 // src/lib/firebase-admin.ts
@@ -1101,12 +1321,73 @@ var requireAuth = async (req, res, next) => {
   next();
 };
 
+// src/middleware/cacheMiddleware.ts
+var cacheResponse = (resourceName, ttlSeconds = 180, options = {}) => {
+  const { includeQueryParams = true, customKeyGenerator } = options;
+  return async (req, res, next) => {
+    if (req.method !== "GET") {
+      return next();
+    }
+    if (!isCacheAvailable()) {
+      res.setHeader("X-Cache", "BYPASS");
+      return next();
+    }
+    try {
+      let cacheKey;
+      if (customKeyGenerator) {
+        cacheKey = customKeyGenerator(req);
+      } else {
+        const userId = req.dbUser?.id;
+        const isSuperAdminRoute = resourceName.startsWith("admin:") || req.originalUrl.includes("/admin/");
+        let prefix;
+        if (isSuperAdminRoute) {
+          prefix = `cache:admin:${resourceName.replace("admin:", "")}`;
+        } else if (userId) {
+          prefix = `cache:${userId}:${resourceName}`;
+        } else {
+          prefix = `cache:public:${resourceName}`;
+        }
+        const paramsKey = Object.keys(req.params).length > 0 ? `:${Object.entries(req.params).map(([k, v]) => `${k}=${v}`).join("&")}` : "";
+        let queryKey = "";
+        if (includeQueryParams && Object.keys(req.query).length > 0) {
+          const sortedQuery = Object.keys(req.query).sort().map((k) => `${k}=${req.query[k]}`).join("&");
+          queryKey = `:qs:${sortedQuery}`;
+        }
+        cacheKey = `${prefix}${paramsKey}${queryKey}`;
+      }
+      const cachedData = await getCache(cacheKey);
+      if (cachedData !== null) {
+        res.setHeader("X-Cache", "HIT");
+        res.setHeader("X-Cache-Key", cacheKey);
+        return res.status(200).json(cachedData);
+      }
+      res.setHeader("X-Cache", "MISS");
+      res.setHeader("X-Cache-Key", cacheKey);
+      const originalJson = res.json.bind(res);
+      res.json = (body) => {
+        if (res.statusCode >= 200 && res.statusCode < 300 && body) {
+          setCache(cacheKey, body, ttlSeconds).catch((err) => {
+            console.debug(`[Redis] Failed to cache key "${cacheKey}":`, err);
+          });
+        }
+        return originalJson(body);
+      };
+      next();
+    } catch (err) {
+      console.debug("[Redis] Cache middleware error, proceeding with bypass:", err);
+      res.setHeader("X-Cache", "ERROR-BYPASS");
+      next();
+    }
+  };
+};
+
 // src/routes/user.routes.ts
 var router = Router();
 router.use(requireAuth);
-router.get("/profile", getUserProfile);
+router.get("/profile", cacheResponse("profile", 300), getUserProfile);
 router.put("/profile", putUserProfile);
 router.post("/reset", resetUserData);
+router.post("/cache/reset", resetUserCache);
 router.post("/plan-request", submitPlanRequest);
 var user_routes_default = router;
 
@@ -1250,12 +1531,14 @@ var getClients = asyncHandler(async (req, res) => {
 var postClient = asyncHandler(async (req, res) => {
   const userId = req.dbUser.id;
   const created = await createClientService(userId, req.body);
+  await invalidateUserCache(userId, "clients", "analytics", "invoices");
   return ApiResponse.success(res, { client: created }, 201, "Client added successfully");
 });
 var putClient = asyncHandler(async (req, res) => {
   const userId = req.dbUser.id;
   const clientId = parsePositiveInt(req.params.id, "client ID");
   const updated = await updateClientService(userId, clientId, req.body);
+  await invalidateUserCache(userId, "clients", "analytics", "invoices");
   return ApiResponse.success(res, { client: updated }, 200, "Client updated successfully");
 });
 var toggleClient = asyncHandler(async (req, res) => {
@@ -1267,19 +1550,21 @@ var toggleClient = asyncHandler(async (req, res) => {
     clientId,
     typeof isActive === "boolean" ? isActive : void 0
   );
+  await invalidateUserCache(userId, "clients", "analytics", "invoices");
   return ApiResponse.success(res, { client: updated }, 200, "Client status updated");
 });
 var removeClient = asyncHandler(async (req, res) => {
   const userId = req.dbUser.id;
   const clientId = parsePositiveInt(req.params.id, "client ID");
   await deleteClientService(userId, clientId);
+  await invalidateUserCache(userId, "clients", "analytics", "invoices");
   return ApiResponse.success(res, { message: "Client deleted successfully" });
 });
 
 // src/routes/clients.routes.ts
 var router2 = Router2();
 router2.use(requireAuth);
-router2.get("/", getClients);
+router2.get("/", cacheResponse("clients", 180), getClients);
 router2.post("/", postClient);
 router2.put("/:id", putClient);
 router2.patch("/:id/toggle-status", toggleClient);
@@ -1554,6 +1839,10 @@ var getPublicInvoice = asyncHandler(async (req, res) => {
 var postInvoice = asyncHandler(async (req, res) => {
   const userId = req.dbUser.id;
   const created = await createInvoiceService(userId, req.body);
+  await Promise.all([
+    invalidateUserCache(userId, "invoices", "analytics", "clients", "payments"),
+    invalidatePattern("cache:public:invoice-public*")
+  ]);
   return ApiResponse.success(res, { invoice: created }, 201, "Invoice created successfully");
 });
 var putInvoiceStatus = asyncHandler(async (req, res) => {
@@ -1561,6 +1850,10 @@ var putInvoiceStatus = asyncHandler(async (req, res) => {
   const invoiceId = parsePositiveInt(req.params.id, "invoice ID");
   const { status, paidAmount } = req.body;
   const updated = await updateInvoiceStatusService(userId, invoiceId, status, paidAmount);
+  await Promise.all([
+    invalidateUserCache(userId, "invoices", "analytics", "clients", "payments"),
+    invalidatePattern("cache:public:invoice-public*")
+  ]);
   return ApiResponse.success(res, { invoice: updated }, 200, "Invoice status updated");
 });
 var removeInvoice = asyncHandler(async (req, res) => {
@@ -1568,6 +1861,10 @@ var removeInvoice = asyncHandler(async (req, res) => {
   const invoiceId = parsePositiveInt(req.params.id, "invoice ID");
   const reason = req.body?.reason;
   await cancelInvoiceService(userId, invoiceId, reason);
+  await Promise.all([
+    invalidateUserCache(userId, "invoices", "analytics", "clients", "payments"),
+    invalidatePattern("cache:public:invoice-public*")
+  ]);
   return ApiResponse.success(res, { message: "Invoice cancelled successfully." });
 });
 
@@ -1631,10 +1928,10 @@ var checkoutLimiter = rateLimit({
 
 // src/routes/invoices.routes.ts
 var router3 = Router3();
-router3.get("/public/:invoiceNumber", publicPayLimiter, getPublicInvoice);
+router3.get("/public/:invoiceNumber", publicPayLimiter, cacheResponse("invoice-public", 300), getPublicInvoice);
 router3.use(requireAuth);
-router3.get("/", getInvoices);
-router3.get("/:id", getInvoice);
+router3.get("/", cacheResponse("invoices", 120), getInvoices);
+router3.get("/:id", cacheResponse("invoice-detail", 120), getInvoice);
 router3.post("/", postInvoice);
 router3.put("/:id/status", putInvoiceStatus);
 router3.delete("/:id", removeInvoice);
@@ -1700,13 +1997,14 @@ var getPayments = asyncHandler(async (req, res) => {
 var postPayment = asyncHandler(async (req, res) => {
   const userId = req.dbUser.id;
   const recorded = await recordPaymentService(userId, req.body);
+  await invalidateUserCache(userId, "payments", "invoices", "analytics");
   return ApiResponse.success(res, { payment: recorded }, 201, "Payment recorded successfully");
 });
 
 // src/routes/payments.routes.ts
 var router4 = Router4();
 router4.use(requireAuth);
-router4.get("/", getPayments);
+router4.get("/", cacheResponse("payments", 180), getPayments);
 router4.post("/", postPayment);
 var payments_routes_default = router4;
 
@@ -1934,6 +2232,7 @@ var sendReminder = asyncHandler(async (req, res) => {
     recipientPhone: cleanPhone,
     status: deliveryStatus
   });
+  await invalidateUserCache(userId, "reminders");
   const whatsappUrl = generateWaMeUrl(cleanPhone, messageContent);
   return ApiResponse.success(res, {
     directApiSent,
@@ -1947,7 +2246,7 @@ var sendReminder = asyncHandler(async (req, res) => {
 // src/routes/reminders.routes.ts
 var router5 = Router5();
 router5.use(requireAuth);
-router5.get("/logs", getReminderLogs);
+router5.get("/logs", cacheResponse("reminders", 180), getReminderLogs);
 router5.post("/send", remindersLimiter, sendReminder);
 var reminders_routes_default = router5;
 
@@ -2120,7 +2419,7 @@ var getAnalytics = asyncHandler(async (req, res) => {
 // src/routes/analytics.routes.ts
 var router6 = Router6();
 router6.use(requireAuth);
-router6.get("/", getAnalytics);
+router6.get("/", cacheResponse("analytics", 300), getAnalytics);
 var analytics_routes_default = router6;
 
 // src/routes/admin.routes.ts
@@ -2145,11 +2444,13 @@ var requireSuperAdmin = (req, res, next) => {
 var router7 = Router7();
 router7.use(requireAuth);
 router7.use(requireSuperAdmin);
-router7.get("/tenants", getTenants);
+router7.get("/tenants", cacheResponse("admin:tenants", 120), getTenants);
 router7.post("/tenants", postTenant);
 router7.put("/tenants/:id/subscription", putTenantSubscription);
-router7.get("/plan-requests", getPlanRequestsList);
+router7.get("/plan-requests", cacheResponse("admin:plan-requests", 120), getPlanRequestsList);
 router7.put("/plan-requests/:id", putPlanRequestStatus);
+router7.post("/cache/flush", flushGlobalCache);
+router7.get("/cache/stats", getCacheHealthStats);
 var admin_routes_default = router7;
 
 // src/routes/recurring.routes.ts
@@ -2350,6 +2651,8 @@ ${upiPayLink}
         clientName: client.name,
         totalAmount: p.totalAmount
       });
+      invalidateUserCache(p.userId, "invoices", "recurring", "analytics").catch(() => {
+      });
       console.log(`[Auto-Billing Engine] Generated recurring invoice ${invNumber} for ${client.name} (\u20B9${p.totalAmount})`);
     }
     return { count: generatedInvoices.length, generated: generatedInvoices };
@@ -2383,6 +2686,7 @@ var createRecurringProfile = asyncHandler(async (req, res) => {
     throw new BadRequestError("Missing required recurring fields: clientId, startDate, items, and totalAmount are mandatory.");
   }
   const created = await createRecurringProfileInDb(userId, req.body);
+  await invalidateUserCache(userId, "recurring", "invoices", "analytics");
   return ApiResponse.success(res, { profile: created }, 201, "Recurring profile created successfully");
 });
 var toggleRecurringProfile = asyncHandler(async (req, res) => {
@@ -2392,6 +2696,7 @@ var toggleRecurringProfile = asyncHandler(async (req, res) => {
   if (!updated) {
     throw new NotFoundError("Recurring profile not found.");
   }
+  await invalidateUserCache(userId, "recurring");
   return ApiResponse.success(res, { profile: updated }, 200, "Recurring profile status toggled");
 });
 var deleteRecurringProfile = asyncHandler(async (req, res) => {
@@ -2401,17 +2706,22 @@ var deleteRecurringProfile = asyncHandler(async (req, res) => {
   if (!deleted) {
     throw new NotFoundError("Recurring profile not found.");
   }
+  await invalidateUserCache(userId, "recurring");
   return ApiResponse.success(res, { message: "Recurring profile deleted successfully" });
 });
 var triggerManualRun = asyncHandler(async (req, res) => {
   const result = await processRecurringInvoices();
+  const userId = req.dbUser?.id;
+  if (userId) {
+    await invalidateUserCache(userId, "recurring", "invoices", "analytics");
+  }
   return ApiResponse.success(res, { result });
 });
 
 // src/routes/recurring.routes.ts
 var router8 = Router8();
 router8.use(requireAuth);
-router8.get("/", getRecurringProfiles);
+router8.get("/", cacheResponse("recurring", 180), getRecurringProfiles);
 router8.post("/", createRecurringProfile);
 router8.put("/:id/toggle", toggleRecurringProfile);
 router8.delete("/:id", deleteRecurringProfile);
@@ -2481,6 +2791,10 @@ var verifyPayment = asyncHandler(async (req, res) => {
   if (req.dbUser?.id && planId) {
     try {
       updatedUser = await updateTenantSubscription(req.dbUser.id, planId, "active");
+      await Promise.all([
+        invalidateUserCache(req.dbUser.id, "profile"),
+        invalidateAdminCache("tenants")
+      ]);
       console.log(`[Subscription Upgraded] User ${req.dbUser.id} upgraded to ${planId}`);
     } catch (dbErr) {
       console.error("[Subscription DB Update Error]:", dbErr);

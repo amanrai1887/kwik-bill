@@ -9,6 +9,7 @@ import { processRecurringInvoices } from '../services/recurring.service.ts';
 import { AuthRequest } from '../middleware/auth.ts';
 import { isSuperAdminEmail } from '../config/app.config.ts';
 import { asyncHandler, ApiResponse, BadRequestError, ForbiddenError, NotFoundError, parsePositiveInt } from '../utils/apiResponse.ts';
+import { invalidateUserCache } from '../lib/redis.ts';
 
 // GET /api/recurring
 export const getRecurringProfiles = asyncHandler(async (req: AuthRequest, res: Response) => {
@@ -39,6 +40,7 @@ export const createRecurringProfile = asyncHandler(async (req: AuthRequest, res:
   }
 
   const created = await createRecurringProfileInDb(userId, req.body);
+  await invalidateUserCache(userId, 'recurring', 'invoices', 'analytics');
   return ApiResponse.success(res, { profile: created }, 201, 'Recurring profile created successfully');
 });
 
@@ -52,6 +54,7 @@ export const toggleRecurringProfile = asyncHandler(async (req: AuthRequest, res:
     throw new NotFoundError('Recurring profile not found.');
   }
 
+  await invalidateUserCache(userId, 'recurring');
   return ApiResponse.success(res, { profile: updated }, 200, 'Recurring profile status toggled');
 });
 
@@ -65,11 +68,16 @@ export const deleteRecurringProfile = asyncHandler(async (req: AuthRequest, res:
     throw new NotFoundError('Recurring profile not found.');
   }
 
+  await invalidateUserCache(userId, 'recurring');
   return ApiResponse.success(res, { message: 'Recurring profile deleted successfully' });
 });
 
 // POST /api/recurring/trigger-run
 export const triggerManualRun = asyncHandler(async (req: AuthRequest, res: Response) => {
   const result = await processRecurringInvoices();
+  const userId = req.dbUser?.id;
+  if (userId) {
+    await invalidateUserCache(userId, 'recurring', 'invoices', 'analytics');
+  }
   return ApiResponse.success(res, { result });
 });

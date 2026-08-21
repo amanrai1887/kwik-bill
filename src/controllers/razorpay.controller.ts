@@ -5,6 +5,7 @@ import { AuthRequest } from "../middleware/auth.ts";
 import { updateTenantSubscription } from "../db/users.ts";
 import { config } from "../config/app.config.ts";
 import { asyncHandler, ApiResponse, BadRequestError, ApiError } from "../utils/apiResponse.ts";
+import { invalidateUserCache, invalidateAdminCache } from "../lib/redis.ts";
 
 function getRazorpayInstance() {
   const keyId = config.razorpay.keyId;
@@ -98,6 +99,10 @@ export const verifyPayment = asyncHandler(async (req: AuthRequest, res: Response
   if (req.dbUser?.id && planId) {
     try {
       updatedUser = await updateTenantSubscription(req.dbUser.id, planId, "active");
+      await Promise.all([
+        invalidateUserCache(req.dbUser.id, 'profile'),
+        invalidateAdminCache('tenants'),
+      ]);
       console.log(`[Subscription Upgraded] User ${req.dbUser.id} upgraded to ${planId}`);
     } catch (dbErr) {
       console.error("[Subscription DB Update Error]:", dbErr);

@@ -6,6 +6,7 @@ import { clients, invoices, payments, reminderLogs, recurringProfiles } from "..
 import { eq } from "drizzle-orm";
 import { isSuperAdminEmail } from "../config/app.config.ts";
 import { asyncHandler, ApiResponse } from "../utils/apiResponse.ts";
+import { invalidateUserCache } from "../lib/redis.ts";
 
 export const getUserProfile = asyncHandler(async (req: AuthRequest, res: Response) => {
   const user = req.dbUser;
@@ -30,6 +31,7 @@ export const putUserProfile = asyncHandler(async (req: AuthRequest, res: Respons
   }
 
   const updated = await updateUserProfile(userId, payload);
+  await invalidateUserCache(userId, 'profile');
   return ApiResponse.success(res, { user: updated });
 });
 
@@ -45,6 +47,9 @@ export const resetUserData = asyncHandler(async (req: AuthRequest, res: Response
     await tx.delete(invoices).where(eq(invoices.userId, userId));
     await tx.delete(clients).where(eq(clients.userId, userId));
   });
+
+  // Invalidate all cached data for this user
+  await invalidateUserCache(userId);
 
   return ApiResponse.success(res, { message: "Workspace successfully reset to a clean slate." });
 });

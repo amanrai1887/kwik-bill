@@ -9,6 +9,7 @@ import {
   cancelInvoiceService 
 } from "../services/invoices.service.ts";
 import { asyncHandler, ApiResponse, parsePositiveInt } from "../utils/apiResponse.ts";
+import { invalidateUserCache, invalidatePattern } from "../lib/redis.ts";
 
 export const getInvoices = asyncHandler(async (req: AuthRequest, res: Response) => {
   const userId = req.dbUser.id;
@@ -48,6 +49,10 @@ export const getPublicInvoice = asyncHandler(async (req: any, res: Response) => 
 export const postInvoice = asyncHandler(async (req: AuthRequest, res: Response) => {
   const userId = req.dbUser.id;
   const created = await createInvoiceService(userId, req.body);
+  await Promise.all([
+    invalidateUserCache(userId, 'invoices', 'analytics', 'clients', 'payments'),
+    invalidatePattern('cache:public:invoice-public*'),
+  ]);
   return ApiResponse.success(res, { invoice: created }, 201, "Invoice created successfully");
 });
 
@@ -56,6 +61,10 @@ export const putInvoiceStatus = asyncHandler(async (req: AuthRequest, res: Respo
   const invoiceId = parsePositiveInt(req.params.id, 'invoice ID');
   const { status, paidAmount } = req.body;
   const updated = await updateInvoiceStatusService(userId, invoiceId, status, paidAmount);
+  await Promise.all([
+    invalidateUserCache(userId, 'invoices', 'analytics', 'clients', 'payments'),
+    invalidatePattern('cache:public:invoice-public*'),
+  ]);
   return ApiResponse.success(res, { invoice: updated }, 200, "Invoice status updated");
 });
 
@@ -64,5 +73,9 @@ export const removeInvoice = asyncHandler(async (req: AuthRequest, res: Response
   const invoiceId = parsePositiveInt(req.params.id, 'invoice ID');
   const reason = req.body?.reason;
   await cancelInvoiceService(userId, invoiceId, reason);
+  await Promise.all([
+    invalidateUserCache(userId, 'invoices', 'analytics', 'clients', 'payments'),
+    invalidatePattern('cache:public:invoice-public*'),
+  ]);
   return ApiResponse.success(res, { message: "Invoice cancelled successfully." });
 });

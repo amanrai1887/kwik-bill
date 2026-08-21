@@ -25,3 +25,5 @@ services:
       - META_PHONE_NUMBER_ID=${META_PHONE_NUMBER_ID:-}
       - APP_URL=${APP_URL:-http://localhost:3000}
       - FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID:-invoice-saas-app-fc503}
+      - REDIS_URL=${REDIS_URL:-redis://default:e4NbDwK78lfNeaI3jrc1xnfS2CNLpYNs@turbosolid-neoclear-retrofast-22519.db.redis.io:17836}
+

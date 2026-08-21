@@ -6,6 +6,7 @@ import { users } from "../db/schema.ts";
 import { createPlanRequest, getAllPlanRequests, updatePlanRequestStatus } from "../db/planRequests.ts";
 import { sendAdminPlanRequestNotification } from "../services/email.service.ts";
 import { asyncHandler, ApiResponse, BadRequestError, parsePositiveInt } from "../utils/apiResponse.ts";
+import { invalidateAdminCache, invalidateUserCache } from "../lib/redis.ts";
 
 export const getTenants = asyncHandler(async (req: AuthRequest, res: Response) => {
   const tenants = await getAllTenants();
@@ -32,6 +33,8 @@ export const postTenant = asyncHandler(async (req: AuthRequest, res: Response) =
     role: 'subscriber',
   }).returning();
 
+  await invalidateAdminCache('tenants');
+
   return ApiResponse.success(res, { tenant: created[0] }, 201, "Tenant onboarded successfully");
 });
 
@@ -42,6 +45,10 @@ export const putTenantSubscription = asyncHandler(async (req: AuthRequest, res: 
     throw new BadRequestError("Both plan and status are required.");
   }
   const updated = await updateTenantSubscription(tenantId, plan, status);
+  await Promise.all([
+    invalidateAdminCache('tenants'),
+    invalidateUserCache(tenantId, 'profile'),
+  ]);
   return ApiResponse.success(res, { tenant: updated });
 });
 
@@ -62,6 +69,8 @@ export const submitPlanRequest = asyncHandler(async (req: AuthRequest, res: Resp
     requestedPlan,
     businessNeeds,
   });
+
+  await invalidateAdminCache('plan-requests');
 
   // Dispatch email notification to admin
   sendAdminPlanRequestNotification({
@@ -96,7 +105,10 @@ export const putPlanRequestStatus = asyncHandler(async (req: AuthRequest, res: R
   // If approving, also activate the user's subscription
   if (approveAsSubscriber && userId && requestedPlan) {
     await updateTenantSubscription(Number(userId), requestedPlan, 'active');
+    await invalidateUserCache(Number(userId), 'profile');
   }
+
+  await invalidateAdminCache('plan-requests', 'tenants');
 
   return ApiResponse.success(res, { request: updated });
 });
