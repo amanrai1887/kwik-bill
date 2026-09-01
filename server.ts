@@ -28,8 +28,21 @@ async function startServer() {
   const app = express();
   const PORT = process.env.PORT || 3000;
 
+  // Security: Enable proxy trust for reverse proxies (Nginx/Cloudflare/AWS ALB)
+  app.set("trust proxy", 1);
+  app.disable("x-powered-by");
+
   // Global Middleware
   app.use(express.json());
+
+  // Security Headers Middleware
+  app.use((req, res, next) => {
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("X-Frame-Options", "SAMEORIGIN");
+    res.setHeader("X-XSS-Protection", "1; mode=block");
+    res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+    next();
+  });
 
   // HTTP Request Logger Middleware with Method, Endpoint, Status Code, & Response Time
   app.use((req, res, next) => {
@@ -67,6 +80,7 @@ async function startServer() {
 
   // Mount Modular API Routes
   app.use("/api", apiRouter);
+
 
   // Frontend Serving (Vite middleware in dev, static files in prod)
   if (process.env.NODE_ENV !== "production") {

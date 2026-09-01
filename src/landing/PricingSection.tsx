@@ -146,6 +146,10 @@ export const PricingSection: React.FC<PricingSectionProps> = ({ onSelectPricing 
               <div className="space-y-3 pt-4 border-t border-slate-100 text-xs font-medium text-slate-700">
                 <div className="flex items-center gap-2.5">
                   <Check className="w-4 h-4 text-indigo-600 shrink-0" />
+                  <span className="font-bold text-indigo-700">🤖 KwikBill AI Agent (Gemini Powered)</span>
+                </div>
+                <div className="flex items-center gap-2.5">
+                  <Check className="w-4 h-4 text-indigo-600 shrink-0" />
                   <span className="font-semibold text-slate-900">Everything in Starter Plan</span>
                 </div>
                 <div className="flex items-center gap-2.5">

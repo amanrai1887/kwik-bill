@@ -51,11 +51,10 @@ export const RoiCalculator: React.FC<RoiCalculatorProps> = ({ onLaunchApp }) => 
                   <button
                     type="button"
                     onClick={() => setSelectedPlan(299)}
-                    className={`py-3 px-4 rounded-xl border text-center font-bold text-sm transition-all ${
-                      selectedPlan === 299
+                    className={`py-3 px-4 rounded-xl border text-center font-bold text-sm transition-all ${selectedPlan === 299
                         ? 'bg-indigo-600 border-indigo-500 text-white shadow-lg shadow-indigo-600/30 ring-2 ring-indigo-400/20'
                         : 'bg-slate-800/80 border-slate-700 text-slate-300 hover:bg-slate-800'
-                    }`}
+                      }`}
                   >
                     <div>₹299 / month</div>
                     <span className="text-[11px] font-normal opacity-80">Starter Small Biz</span>
@@ -64,11 +63,10 @@ export const RoiCalculator: React.FC<RoiCalculatorProps> = ({ onLaunchApp }) => 
                   <button
                     type="button"
                     onClick={() => setSelectedPlan(499)}
-                    className={`py-3 px-4 rounded-xl border text-center font-bold text-sm transition-all ${
-                      selectedPlan === 499
+                    className={`py-3 px-4 rounded-xl border text-center font-bold text-sm transition-all ${selectedPlan === 499
                         ? 'bg-indigo-600 border-indigo-500 text-white shadow-lg shadow-indigo-600/30 ring-2 ring-indigo-400/20'
                         : 'bg-slate-800/80 border-slate-700 text-slate-300 hover:bg-slate-800'
-                    }`}
+                      }`}
                   >
                     <div>₹499 / month</div>
                     <span className="text-[11px] font-normal opacity-80">Growth + Auto WhatsApp</span>

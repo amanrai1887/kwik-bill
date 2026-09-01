@@ -57,14 +57,14 @@ export const LandingHero: React.FC<LandingHeroProps> = ({ onLaunchDemo, onSelect
 
           {/* Trust badges */}
           <div className="mt-8 flex flex-wrap items-center justify-center gap-6 text-xs font-medium text-slate-500">
+            <span className="inline-flex items-center gap-1.5 font-bold text-indigo-700">
+              <Sparkles className="w-4 h-4 text-indigo-600" /> 🤖 KwikBill AI Agent (⌘K)
+            </span>
             <span className="inline-flex items-center gap-1.5">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600" /> 🎨 6 Pro Invoice Templates & Logo
+              <CheckCircle2 className="w-4 h-4 text-emerald-600" /> 🎨 6 Pro Templates & Logo
             </span>
             <span className="inline-flex items-center gap-1.5">
               <CheckCircle2 className="w-4 h-4 text-emerald-600" /> 🔁 Auto-Recurring Cron Engine
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600" /> 🌐 Public Web Payment Portal
             </span>
             <span className="inline-flex items-center gap-1.5">
               <CheckCircle2 className="w-4 h-4 text-emerald-600" /> 💬 1-Click WhatsApp Reminders

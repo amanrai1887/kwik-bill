@@ -85,7 +85,8 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
 
   // UPI deep link
   const upiPayLink = `upi://pay?pa=${upiId}&pn=${encodeURIComponent(businessName)}&am=${balanceDue}&cu=INR&tn=${encodeURIComponent(`Invoice ${invoiceNumber}`)}`;
-  const publicInvoiceUrl = typeof window !== 'undefined' ? `${window.location.origin}/pay/${invoiceNumber}` : `https://kwikbill.com/pay/${invoiceNumber}`;
+  const publicInvoiceIdentifier = invoice.shareToken || invoiceNumber;
+  const publicInvoiceUrl = typeof window !== 'undefined' ? `${window.location.origin}/pay/${publicInvoiceIdentifier}` : `https://kwikbill.com/pay/${publicInvoiceIdentifier}`;
 
   // 4 Escalation Templates
   const getMessageTemplate = (type: TemplateType) => {

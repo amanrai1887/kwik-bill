@@ -1,6 +1,7 @@
 import React from 'react';
 import { LandingHeader } from './LandingHeader.tsx';
 import { LandingHero } from './LandingHero.tsx';
+import { AIAgentSection } from './AIAgentSection.tsx';
 import { TargetIndustries } from './TargetIndustries.tsx';
 import { FeaturesGrid } from './FeaturesGrid.tsx';
 import { MobileAppSection } from './MobileAppSection.tsx';
@@ -19,6 +20,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLaunchDemo, onSelect
       <LandingHeader onLaunchDemo={onLaunchDemo} onSelectPricing={onSelectPricing} />
       <main className="flex-1">
         <LandingHero onLaunchDemo={onLaunchDemo} onSelectPricing={onSelectPricing} />
+        <AIAgentSection onLaunchDemo={onLaunchDemo} onSelectPricing={onSelectPricing} />
         <TargetIndustries onSelectIndustry={() => {}} />
         <FeaturesGrid />
         <MobileAppSection />

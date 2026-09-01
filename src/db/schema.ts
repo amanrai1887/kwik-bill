@@ -198,6 +198,20 @@ export const recurringProfiles = pgTable('recurring_profiles', {
   updatedAt: timestamp('updated_at').defaultNow(),
 });
 
+// AI Agent Persistent Chat Conversations
+export const aiConversations = pgTable('ai_conversations', {
+  id: serial('id').primaryKey(),
+  conversationId: text('conversation_id').notNull().unique(),
+  userId: integer('user_id')
+    .references(() => users.id, { onDelete: 'cascade' })
+    .notNull(),
+  title: text('title').default('New Conversation').notNull(),
+  messages: jsonb('messages').notNull().default([]), // Array<{ id: string, role: 'user' | 'model' | 'function' | 'system', content?: string, toolCalls?: any[], toolResult?: any, structuredData?: any, createdAt: string }>
+  lastActiveAt: timestamp('last_active_at').defaultNow(),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   clients: many(clients),
@@ -206,6 +220,14 @@ export const usersRelations = relations(users, ({ many }) => ({
   reminderLogs: many(reminderLogs),
   planRequests: many(planRequests),
   recurringProfiles: many(recurringProfiles),
+  aiConversations: many(aiConversations),
+}));
+
+export const aiConversationsRelations = relations(aiConversations, ({ one }) => ({
+  user: one(users, {
+    fields: [aiConversations.userId],
+    references: [users.id],
+  }),
 }));
 
 export const recurringProfilesRelations = relations(recurringProfiles, ({ one }) => ({

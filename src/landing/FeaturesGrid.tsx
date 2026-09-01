@@ -4,6 +4,19 @@ import { FileText, MessageSquare, CheckCircle, BarChart3, Repeat, Globe, Sparkle
 export const FeaturesGrid: React.FC = () => {
   const features = [
     {
+      icon: Sparkles,
+      tag: '⭐ AI Agent 2.0',
+      title: '🤖 Conversational AI Billing Agent',
+      description:
+        'Manage your entire billing pipeline naturally. Ask AI to "Show unpaid invoices from last month", "Create invoice for ABC Traders ₹50,000", "Add 18% GST", "Generate PDF", or "Send via WhatsApp".',
+      points: [
+        'Natural language intent understanding & multi-turn memory',
+        'Headless Puppeteer PDF & WhatsApp Cloud API delivery',
+        'Automatic safety checks & confirmation cards for all write actions',
+      ],
+      highlight: true,
+    },
+    {
       icon: Palette,
       tag: '1. Templates & Brand Studio',
       title: '🎨 6 Pro Invoice Templates & Custom Logo',

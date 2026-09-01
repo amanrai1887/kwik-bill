@@ -25,11 +25,13 @@ services:
       - RAZORPAY_KEY_SECRET=${RAZORPAY_KEY_SECRET:-7FStZMDU6584xYp6O0Zav65d}
       - VITE_RAZORPAY_KEY_ID=${VITE_RAZORPAY_KEY_ID:-rzp_test_TReZcmt9KLYGJB}
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-3.6-flash}
       - META_WHATSAPP_TOKEN=${META_WHATSAPP_TOKEN:-}
       - META_PHONE_NUMBER_ID=${META_PHONE_NUMBER_ID:-}
       - APP_URL=${APP_URL:-http://localhost:3000}
       - FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID:-invoice-saas-app-fc503}
       - REDIS_URL=redis://redis:6379
+      - REDIS_ENABLED=false
     depends_on:
       postgres:
         condition: service_healthy

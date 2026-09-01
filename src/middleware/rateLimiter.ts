@@ -1,13 +1,10 @@
 import rateLimit from 'express-rate-limit';
 
-// Safe helper to extract client IP across local, Docker, and serverless/Vercel environments
+// Safe helper to extract client IP relying on Express's proxy-validated req.ip
 const getClientIp = (req: any): string => {
-  const forwarded = req.headers?.['x-forwarded-for'];
-  if (typeof forwarded === 'string') {
-    return forwarded.split(',')[0].trim();
-  }
-  return req.headers?.['x-real-ip'] || req.socket?.remoteAddress || req.connection?.remoteAddress || req.ip || '127.0.0.1';
+  return req.ip || req.socket?.remoteAddress || req.connection?.remoteAddress || '127.0.0.1';
 };
+
 
 // 1. General API Rate Limiter (300 requests per minute)
 export const generalApiLimiter = rateLimit({
@@ -64,4 +61,24 @@ export const checkoutLimiter = rateLimit({
     error: 'Too many payment requests initiated. Please retry shortly.',
   },
 });
+
+// 5. AI Agent Rate Limiter (10 requests per minute for Pro users)
+export const aiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req: any) => {
+    return req.dbUser?.id ? `user_${req.dbUser.id}` : getClientIp(req);
+  },
+  validate: false,
+  message: {
+    success: false,
+    error: {
+      code: 'AI_RATE_LIMITED',
+      message: 'AI request rate limit reached (10 requests/minute). Please pause for a moment before your next prompt.',
+    },
+  },
+});
+
 

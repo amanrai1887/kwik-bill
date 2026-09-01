@@ -202,7 +202,21 @@ export async function initializeDatabase() {
       );
     `);
 
-    // 8. Performance Indexes for Enterprise Scale
+    // 8. AI Agent Conversations Table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS ai_conversations (
+        id SERIAL PRIMARY KEY,
+        conversation_id TEXT NOT NULL UNIQUE,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE NOT NULL,
+        title TEXT NOT NULL DEFAULT 'New Conversation',
+        messages JSONB NOT NULL DEFAULT '[]'::jsonb,
+        last_active_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // 9. Performance Indexes for Enterprise Scale
     await pool.query(`
       CREATE INDEX IF NOT EXISTS idx_invoices_user_id ON invoices(user_id);
       CREATE INDEX IF NOT EXISTS idx_invoices_client_id ON invoices(client_id);
@@ -216,6 +230,8 @@ export async function initializeDatabase() {
       CREATE INDEX IF NOT EXISTS idx_reminder_logs_invoice_id ON reminder_logs(invoice_id);
       CREATE INDEX IF NOT EXISTS idx_recurring_profiles_user_id ON recurring_profiles(user_id);
       CREATE INDEX IF NOT EXISTS idx_recurring_profiles_next_run ON recurring_profiles(next_run_date, is_active);
+      CREATE INDEX IF NOT EXISTS idx_ai_conversations_user_id ON ai_conversations(user_id);
+      CREATE INDEX IF NOT EXISTS idx_ai_conversations_conv_id ON ai_conversations(conversation_id);
     `);
 
     console.log('Database tables & performance indexes verified / initialized successfully.');

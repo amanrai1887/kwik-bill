@@ -7,8 +7,8 @@ export const config = {
   isProduction: process.env.NODE_ENV === 'production',
   port: Number(process.env.PORT) || 3000,
   
-  // SuperAdmin configuration: Supports comma-separated list of admin emails
-  superAdminEmails: (process.env.ADMIN_EMAIL || process.env.SUPERADMIN_EMAIL || 'arai.343531@gmail.com')
+  // SuperAdmin configuration: Supports comma-separated list of admin emails (no hardcoded fallback)
+  superAdminEmails: (process.env.ADMIN_EMAIL || process.env.SUPERADMIN_EMAIL || '')
     .split(',')
     .map(e => e.trim().toLowerCase())
     .filter(Boolean),
@@ -31,17 +31,35 @@ export const config = {
     projectId: process.env.FIREBASE_PROJECT_ID || 'invoice-saas-app-fc503',
   },
 
-  // Redis Cache
+  // Redis Cache (Temporarily disabled)
   redis: {
     url: process.env.REDIS_URL || 'redis://localhost:6379',
-    enabled: process.env.REDIS_ENABLED !== 'false',
+    enabled: process.env.REDIS_ENABLED === 'true',
   },
 
-  // Security / Demo Mode
-  allowDemoAuth: process.env.ALLOW_DEMO_AUTH !== 'false',
+  // Gemini AI Agent
+  gemini: {
+    apiKey: (process.env.GEMINI_API_KEY || '').trim(),
+    model: process.env.GEMINI_MODEL || 'gemini-3.6-flash',
+  },
+
+  // AI Rate Limits & Gating
+  ai: {
+    maxRequestsPerMinute: Number(process.env.AI_RATE_LIMIT_PER_MIN) || 10,
+  },
+
+  // Security / Demo Mode: Strictly disabled in production unless explicitly enabled for dev/testing
+  allowDemoAuth: process.env.NODE_ENV !== 'production' && process.env.ALLOW_DEMO_AUTH === 'true',
+};
+
+// Authoritative server-side plan pricing (in paise: 1 INR = 100 paise)
+export const PLAN_PRICING: Record<string, number> = {
+  starter_299: 29900,
+  pro_499: 49900,
 };
 
 export function isSuperAdminEmail(email?: string | null): boolean {
-  if (!email) return false;
+  if (!email || config.superAdminEmails.length === 0) return false;
   return config.superAdminEmails.includes(email.trim().toLowerCase());
 }
+

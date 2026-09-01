@@ -20,9 +20,9 @@ export const LandingHeader: React.FC<LandingHeaderProps> = ({ onLaunchDemo, onSe
             window.scrollTo({ top: 0, behavior: 'smooth' });
           }}
         >
-          <img 
-            src="/logo.png" 
-            alt="KwikBill Logo" 
+          <img
+            src="/logo.png"
+            alt="KwikBill Logo"
             className="w-10 h-10 rounded-xl object-contain bg-white p-0.5 border border-slate-200 shadow-sm"
           />
           <div className="flex flex-col">

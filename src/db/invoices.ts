@@ -130,7 +130,10 @@ import crypto from "crypto";
 export async function getInvoiceByNumberPublic(identifier: string) {
   try {
     const { users } = await import('./schema.ts');
-    // Support lookup by unique shareToken or invoiceNumber
+    const token = identifier ? identifier.trim() : '';
+    if (!token) return null;
+
+    // Secure IDOR-proof lookup: Query ONLY by high-entropy shareToken
     const rows = await db
       .select({
         invoice: invoices,
@@ -155,7 +158,7 @@ export async function getInvoiceByNumberPublic(identifier: string) {
       .from(invoices)
       .innerJoin(clients, eq(invoices.clientId, clients.id))
       .innerJoin(users, eq(invoices.userId, users.id))
-      .where(or(eq(invoices.shareToken, identifier), eq(invoices.invoiceNumber, identifier)));
+      .where(eq(invoices.shareToken, token));
 
     if (rows.length === 0) return null;
 
@@ -195,7 +198,7 @@ export async function createInvoice(userId: number, data: {
   terms?: string;
 }) {
   try {
-    const generatedShareToken = data.shareToken || `inv_live_${crypto.randomBytes(12).toString('hex')}`;
+    const generatedShareToken = data.shareToken || `inv_live_${crypto.randomBytes(16).toString('hex')}`;
     const inserted = await db.insert(invoices).values({
       userId,
       clientId: data.clientId,
@@ -203,6 +206,7 @@ export async function createInvoice(userId: number, data: {
       issueDate: data.issueDate,
       dueDate: data.dueDate,
       status: data.status || 'pending',
+
       currency: data.currency || 'INR',
       subtotal: data.subtotal,
       taxRate: data.taxRate || '18.00',

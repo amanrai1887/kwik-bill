@@ -7,6 +7,7 @@ import remindersRoutes from "./reminders.routes.ts";
 import analyticsRoutes from "./analytics.routes.ts";
 import adminRoutes from "./admin.routes.ts";
 import recurringRoutes from "./recurring.routes.ts";
+import aiRoutes from "./ai.routes.ts";
 import { createOrder, verifyPayment } from "../controllers/razorpay.controller.ts";
 import { requireAuth } from "../middleware/auth.ts";
 import { generalApiLimiter, checkoutLimiter } from "../middleware/rateLimiter.ts";
@@ -33,6 +34,7 @@ apiRouter.post("/razorpay/verify-payment", requireAuth, checkoutLimiter, verifyP
 
 // Mount domain routes
 apiRouter.use("/user", userRoutes);
+apiRouter.use("/ai", aiRoutes);
 apiRouter.use("/clients", clientsRoutes);
 apiRouter.use("/invoices", invoicesRoutes);
 apiRouter.use("/payments", paymentsRoutes);

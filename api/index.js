@@ -11,6 +11,8 @@ var __export = (target, all) => {
 // src/db/schema.ts
 var schema_exports = {};
 __export(schema_exports, {
+  aiConversations: () => aiConversations,
+  aiConversationsRelations: () => aiConversationsRelations,
   clients: () => clients,
   clientsRelations: () => clientsRelations,
   invoices: () => invoices,
@@ -28,7 +30,7 @@ __export(schema_exports, {
 });
 import { relations } from "drizzle-orm";
 import { boolean, integer, jsonb, numeric, pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
-var users, clients, invoices, payments, reminderLogs, planRequests, recurringProfiles, usersRelations, recurringProfilesRelations, planRequestsRelations, clientsRelations, invoicesRelations, paymentsRelations, reminderLogsRelations;
+var users, clients, invoices, payments, reminderLogs, planRequests, recurringProfiles, aiConversations, usersRelations, aiConversationsRelations, recurringProfilesRelations, planRequestsRelations, clientsRelations, invoicesRelations, paymentsRelations, reminderLogsRelations;
 var init_schema = __esm({
   "src/db/schema.ts"() {
     users = pgTable("users", {
@@ -206,13 +208,31 @@ var init_schema = __esm({
       createdAt: timestamp("created_at").defaultNow(),
       updatedAt: timestamp("updated_at").defaultNow()
     });
+    aiConversations = pgTable("ai_conversations", {
+      id: serial("id").primaryKey(),
+      conversationId: text("conversation_id").notNull().unique(),
+      userId: integer("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+      title: text("title").default("New Conversation").notNull(),
+      messages: jsonb("messages").notNull().default([]),
+      // Array<{ id: string, role: 'user' | 'model' | 'function' | 'system', content?: string, toolCalls?: any[], toolResult?: any, structuredData?: any, createdAt: string }>
+      lastActiveAt: timestamp("last_active_at").defaultNow(),
+      createdAt: timestamp("created_at").defaultNow(),
+      updatedAt: timestamp("updated_at").defaultNow()
+    });
     usersRelations = relations(users, ({ many }) => ({
       clients: many(clients),
       invoices: many(invoices),
       payments: many(payments),
       reminderLogs: many(reminderLogs),
       planRequests: many(planRequests),
-      recurringProfiles: many(recurringProfiles)
+      recurringProfiles: many(recurringProfiles),
+      aiConversations: many(aiConversations)
+    }));
+    aiConversationsRelations = relations(aiConversations, ({ one }) => ({
+      user: one(users, {
+        fields: [aiConversations.userId],
+        references: [users.id]
+      })
     }));
     recurringProfilesRelations = relations(recurringProfiles, ({ one }) => ({
       user: one(users, {
@@ -278,55 +298,66 @@ var init_schema = __esm({
   }
 });
 
+// src/db/index.ts
+var db_exports = {};
+__export(db_exports, {
+  createPool: () => createPool,
+  db: () => db
+});
+import { drizzle } from "drizzle-orm/node-postgres";
+import { Pool } from "pg";
+import * as dotenv from "dotenv";
+var createPool, pool, db;
+var init_db = __esm({
+  "src/db/index.ts"() {
+    init_schema();
+    dotenv.config();
+    createPool = () => {
+      if (!global._postgresPool) {
+        const connectionString = process.env.DATABASE_URL;
+        const isSsl = process.env.DB_SSL === "true" || connectionString && connectionString.includes("supabase.co") || process.env.SQL_HOST && process.env.SQL_HOST.includes("supabase.co");
+        const sslConfig = isSsl ? { rejectUnauthorized: false } : void 0;
+        if (connectionString) {
+          global._postgresPool = new Pool({
+            connectionString,
+            ssl: sslConfig,
+            max: 10,
+            connectionTimeoutMillis: 15e3
+          });
+        } else {
+          global._postgresPool = new Pool({
+            host: process.env.SQL_HOST || "postgres",
+            port: parseInt(process.env.SQL_PORT || "5432"),
+            user: process.env.SQL_USER || "postgres",
+            password: process.env.SQL_PASSWORD || "postgres",
+            database: process.env.SQL_DB_NAME || "invoice_saas",
+            ssl: sslConfig,
+            max: 10,
+            connectionTimeoutMillis: 15e3
+          });
+        }
+        global._postgresPool.on("error", (err) => {
+          console.error("Unexpected error on idle SQL pool client:", err);
+        });
+      }
+      return global._postgresPool;
+    };
+    pool = createPool();
+    db = drizzle(pool, { schema: schema_exports });
+  }
+});
+
 // src/api-serverless.ts
 import express from "express";
 
 // src/routes/index.ts
-import { Router as Router9 } from "express";
+import { Router as Router10 } from "express";
 
 // src/routes/user.routes.ts
 import { Router } from "express";
 
-// src/db/index.ts
-init_schema();
-import { drizzle } from "drizzle-orm/node-postgres";
-import { Pool } from "pg";
-import * as dotenv from "dotenv";
-dotenv.config();
-var createPool = () => {
-  if (!global._postgresPool) {
-    const connectionString = process.env.DATABASE_URL;
-    const isSsl = process.env.DB_SSL === "true" || connectionString && connectionString.includes("supabase.co") || process.env.SQL_HOST && process.env.SQL_HOST.includes("supabase.co");
-    const sslConfig = isSsl ? { rejectUnauthorized: false } : void 0;
-    if (connectionString) {
-      global._postgresPool = new Pool({
-        connectionString,
-        ssl: sslConfig,
-        max: 10,
-        connectionTimeoutMillis: 15e3
-      });
-    } else {
-      global._postgresPool = new Pool({
-        host: process.env.SQL_HOST || "postgres",
-        port: parseInt(process.env.SQL_PORT || "5432"),
-        user: process.env.SQL_USER || "postgres",
-        password: process.env.SQL_PASSWORD || "postgres",
-        database: process.env.SQL_DB_NAME || "invoice_saas",
-        ssl: sslConfig,
-        max: 10,
-        connectionTimeoutMillis: 15e3
-      });
-    }
-    global._postgresPool.on("error", (err) => {
-      console.error("Unexpected error on idle SQL pool client:", err);
-    });
-  }
-  return global._postgresPool;
-};
-var pool = createPool();
-var db = drizzle(pool, { schema: schema_exports });
-
 // src/db/users.ts
+init_db();
 init_schema();
 import { eq as eq2 } from "drizzle-orm";
 
@@ -337,8 +368,8 @@ var config3 = {
   env: process.env.NODE_ENV || "development",
   isProduction: process.env.NODE_ENV === "production",
   port: Number(process.env.PORT) || 3e3,
-  // SuperAdmin configuration: Supports comma-separated list of admin emails
-  superAdminEmails: (process.env.ADMIN_EMAIL || process.env.SUPERADMIN_EMAIL || "arai.343531@gmail.com").split(",").map((e) => e.trim().toLowerCase()).filter(Boolean),
+  // SuperAdmin configuration: Supports comma-separated list of admin emails (no hardcoded fallback)
+  superAdminEmails: (process.env.ADMIN_EMAIL || process.env.SUPERADMIN_EMAIL || "").split(",").map((e) => e.trim().toLowerCase()).filter(Boolean),
   // Razorpay
   razorpay: {
     keyId: (process.env.RAZORPAY_KEY_ID || process.env.VITE_RAZORPAY_KEY_ID || "").trim(),
@@ -354,20 +385,34 @@ var config3 = {
   firebase: {
     projectId: process.env.FIREBASE_PROJECT_ID || "invoice-saas-app-fc503"
   },
-  // Redis Cache
+  // Redis Cache (Temporarily disabled)
   redis: {
     url: process.env.REDIS_URL || "redis://localhost:6379",
-    enabled: process.env.REDIS_ENABLED !== "false"
+    enabled: process.env.REDIS_ENABLED === "true"
   },
-  // Security / Demo Mode
-  allowDemoAuth: process.env.ALLOW_DEMO_AUTH !== "false"
+  // Gemini AI Agent
+  gemini: {
+    apiKey: (process.env.GEMINI_API_KEY || "").trim(),
+    model: process.env.GEMINI_MODEL || "gemini-3.6-flash"
+  },
+  // AI Rate Limits & Gating
+  ai: {
+    maxRequestsPerMinute: Number(process.env.AI_RATE_LIMIT_PER_MIN) || 10
+  },
+  // Security / Demo Mode: Strictly disabled in production unless explicitly enabled for dev/testing
+  allowDemoAuth: process.env.NODE_ENV !== "production" && process.env.ALLOW_DEMO_AUTH === "true"
+};
+var PLAN_PRICING = {
+  starter_299: 29900,
+  pro_499: 49900
 };
 function isSuperAdminEmail(email) {
-  if (!email) return false;
+  if (!email || config3.superAdminEmails.length === 0) return false;
   return config3.superAdminEmails.includes(email.trim().toLowerCase());
 }
 
 // src/db/demoSeed.ts
+init_db();
 init_schema();
 import { eq } from "drizzle-orm";
 async function ensureDemoData(demoUserId) {
@@ -661,6 +706,7 @@ async function updateTenantSubscription(userId, plan, status) {
 }
 
 // src/controllers/user.controller.ts
+init_db();
 init_schema();
 import { eq as eq3 } from "drizzle-orm";
 
@@ -956,9 +1002,11 @@ var resetUserData = asyncHandler(async (req, res) => {
 });
 
 // src/controllers/admin.controller.ts
+init_db();
 init_schema();
 
 // src/db/planRequests.ts
+init_db();
 init_schema();
 import { eq as eq4, desc } from "drizzle-orm";
 async function createPlanRequest(userId, data) {
@@ -1632,6 +1680,7 @@ var user_routes_default = router;
 import { Router as Router2 } from "express";
 
 // src/db/clients.ts
+init_db();
 init_schema();
 import { eq as eq5, and, desc as desc2, inArray } from "drizzle-orm";
 async function getClientsByUserId(userId) {
@@ -1813,6 +1862,7 @@ var clients_routes_default = router2;
 import { Router as Router3 } from "express";
 
 // src/db/invoices.ts
+init_db();
 init_schema();
 import { eq as eq6, and as and2, desc as desc3, or, sql } from "drizzle-orm";
 import crypto from "crypto";
@@ -1900,6 +1950,8 @@ async function getInvoiceById(userId, invoiceId) {
 async function getInvoiceByNumberPublic(identifier) {
   try {
     const { users: users3 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
+    const token = identifier ? identifier.trim() : "";
+    if (!token) return null;
     const rows = await db.select({
       invoice: invoices,
       client: clients,
@@ -1919,7 +1971,7 @@ async function getInvoiceByNumberPublic(identifier) {
         brandColor: users3.brandColor,
         customFooter: users3.customFooter
       }
-    }).from(invoices).innerJoin(clients, eq6(invoices.clientId, clients.id)).innerJoin(users3, eq6(invoices.userId, users3.id)).where(or(eq6(invoices.shareToken, identifier), eq6(invoices.invoiceNumber, identifier)));
+    }).from(invoices).innerJoin(clients, eq6(invoices.clientId, clients.id)).innerJoin(users3, eq6(invoices.userId, users3.id)).where(eq6(invoices.shareToken, token));
     if (rows.length === 0) return null;
     return {
       ...normalizeInvoiceFinancials(rows[0].invoice),
@@ -1933,7 +1985,7 @@ async function getInvoiceByNumberPublic(identifier) {
 }
 async function createInvoice(userId, data) {
   try {
-    const generatedShareToken = data.shareToken || `inv_live_${crypto.randomBytes(12).toString("hex")}`;
+    const generatedShareToken = data.shareToken || `inv_live_${crypto.randomBytes(16).toString("hex")}`;
     const inserted = await db.insert(invoices).values({
       userId,
       clientId: data.clientId,
@@ -2008,6 +2060,7 @@ async function deleteInvoice(userId, invoiceId, reason) {
 
 // src/services/invoices.service.ts
 init_schema();
+init_db();
 import { eq as eq7, and as and3 } from "drizzle-orm";
 async function getInvoicesService(userId, options) {
   return await getInvoicesByUserId(userId, options);
@@ -2148,11 +2201,7 @@ var removeInvoice = asyncHandler(async (req, res) => {
 // src/middleware/rateLimiter.ts
 import rateLimit from "express-rate-limit";
 var getClientIp = (req) => {
-  const forwarded = req.headers?.["x-forwarded-for"];
-  if (typeof forwarded === "string") {
-    return forwarded.split(",")[0].trim();
-  }
-  return req.headers?.["x-real-ip"] || req.socket?.remoteAddress || req.connection?.remoteAddress || req.ip || "127.0.0.1";
+  return req.ip || req.socket?.remoteAddress || req.connection?.remoteAddress || "127.0.0.1";
 };
 var generalApiLimiter = rateLimit({
   windowMs: 60 * 1e3,
@@ -2202,6 +2251,23 @@ var checkoutLimiter = rateLimit({
     error: "Too many payment requests initiated. Please retry shortly."
   }
 });
+var aiLimiter = rateLimit({
+  windowMs: 60 * 1e3,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    return req.dbUser?.id ? `user_${req.dbUser.id}` : getClientIp(req);
+  },
+  validate: false,
+  message: {
+    success: false,
+    error: {
+      code: "AI_RATE_LIMITED",
+      message: "AI request rate limit reached (10 requests/minute). Please pause for a moment before your next prompt."
+    }
+  }
+});
 
 // src/routes/invoices.routes.ts
 var router3 = Router3();
@@ -2218,6 +2284,7 @@ var invoices_routes_default = router3;
 import { Router as Router4 } from "express";
 
 // src/services/payments.service.ts
+init_db();
 init_schema();
 import { eq as eq8, and as and4, desc as desc4 } from "drizzle-orm";
 async function recordPaymentService(userId, data) {
@@ -2289,6 +2356,7 @@ var payments_routes_default = router4;
 import { Router as Router5 } from "express";
 
 // src/db/reminders.ts
+init_db();
 init_schema();
 import { eq as eq9, desc as desc5 } from "drizzle-orm";
 async function logWhatsAppReminder(userId, data) {
@@ -2537,6 +2605,7 @@ var reminders_routes_default = router5;
 import { Router as Router6 } from "express";
 
 // src/db/payments.ts
+init_db();
 init_schema();
 import { eq as eq10, and as and6, desc as desc6 } from "drizzle-orm";
 async function getPaymentsForUser(userId) {
@@ -2740,6 +2809,7 @@ var admin_routes_default = router7;
 import { Router as Router8 } from "express";
 
 // src/db/recurring.ts
+init_db();
 init_schema();
 import { eq as eq11, and as and7, desc as desc7, lte } from "drizzle-orm";
 async function getRecurringProfilesByUserId(userId) {
@@ -3008,8 +3078,1971 @@ router8.get("/", cacheResponse("recurring", 180), getRecurringProfiles);
 router8.post("/", validateBody(createRecurringSchema), createRecurringProfile);
 router8.put("/:id/toggle", toggleRecurringProfile);
 router8.delete("/:id", deleteRecurringProfile);
-router8.post("/trigger-run", triggerManualRun);
+router8.post("/trigger-run", requireSuperAdmin, triggerManualRun);
 var recurring_routes_default = router8;
+
+// src/routes/ai.routes.ts
+import { Router as Router9 } from "express";
+
+// src/services/agent.orchestrator.ts
+import { GoogleGenAI } from "@google/genai";
+
+// src/config/ai.config.ts
+function buildSystemPrompt(ctx) {
+  return `You are KwikBill AI \u2014 an expert, conversational billing & financial assistant built specifically for Indian businesses, SMEs, transporters, agencies, freelancers, and merchants.
+
+BUSINESS CONTEXT (Active Merchant Workspace):
+- Business Name: ${ctx.businessName || "My Business"}
+- Merchant Email: ${ctx.email}
+- Contact Phone: ${ctx.phone || "Not Set"}
+- GSTIN: ${ctx.gstin || "Unregistered / Not Set"}
+- Industry Segment: ${ctx.industryType}
+- Subscription Plan: ${ctx.subscriptionPlan}
+- UPI ID: ${ctx.upiId || "Not Set"}
+- Bank Details: ${ctx.bankName ? `${ctx.bankName} (A/C: ${ctx.bankAccountNo}, IFSC: ${ctx.bankIfsc})` : "Not Set"}
+- Current Date (India Standard Time): ${ctx.currentDate}
+
+CORE CAPABILITIES & TOOLS:
+1. Invoices: Query by status/date/party (e.g. "unpaid invoices from last month"), retrieve details, draft new invoices, update line items/GST/discounts, update status, cancel invoices.
+2. Clients: Search client directory, add new customers/parties, update party profile.
+3. Payments: Record collections (UPI, Bank Transfer, Cash, Cheque) against invoices.
+4. WhatsApp Delivery: Send payment reminders or invoice PDFs via WhatsApp directly to clients.
+5. PDF Generation: Generate downloadable, print-ready PDF invoices.
+6. Analytics & Intelligence: Retrieve revenue metrics, cash flow forecasts, overdue ageing buckets, and party credit risk ratings.
+
+CRITICAL BEHAVIORAL & SAFETY RULES:
+1. ALWAYS confirm financial mutations if user did not explicitly say "confirm" or "proceed":
+   - When creating a new invoice or recording a payment, unless the user explicitly gives complete confirmation, call the tool or draft the action and request confirmation, or return the draft invoice summary clearly for the user to review.
+2. INDIAN FINANCIAL STANDARDS:
+   - Format currency values in Indian Rupees (\u20B9) with appropriate comma separation (e.g. \u20B950,000, \u20B91,47,500).
+   - Default GST rate is 18.00% unless specified otherwise (or 0%, 5%, 12%, 18%, 28%).
+   - Understand Indian financial terms: GST, CGST, SGST, IGST, TDS, Place of Supply, E-way bill, LR number (lorry receipt).
+3. DATE INTERPRETATION:
+   - Interpret relative dates against today's date (${ctx.currentDate}).
+   - "Last month" means the previous calendar month.
+   - "Overdue" means invoices where dueDate < ${ctx.currentDate} and status != 'paid'.
+4. MULTI-STEP CONVERSATION FLOWS:
+   - Maintain context across follow-up queries. If user creates an invoice and then says "Add 18% GST", apply it to the invoice created in the recent context.
+   - If user then says "Generate PDF" or "Send it through WhatsApp", use the active invoice ID.
+5. CONCISE & ACTIONABLE RESPONSES:
+   - Be professional, polite, concise, and helpful.
+   - Use markdown tables or bullet points for readability. Highlight invoice numbers, totals, and due dates clearly.
+`;
+}
+var AI_SUGGESTIONS = [
+  "Show me unpaid invoices from last month",
+  "Create an invoice for ABC Traders for \u20B950,000",
+  "What is our total collection this month?",
+  "Which clients have high payment delay risk?",
+  "Send payment reminder for overdue invoices"
+];
+
+// src/services/tools/invoice.tool.ts
+init_db();
+init_schema();
+import { eq as eq12, and as and8 } from "drizzle-orm";
+var invoiceToolDeclarations = [
+  {
+    name: "query_invoices",
+    description: "Query and filter invoices from PostgreSQL by status, client name, search query, or relative date ranges like last month or overdue.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        status: {
+          type: "STRING",
+          description: "Filter status: 'pending', 'paid', 'overdue', 'partial', 'cancelled', or 'all'"
+        },
+        search: {
+          type: "STRING",
+          description: "Search string for invoice number, client name, or company"
+        },
+        clientName: {
+          type: "STRING",
+          description: "Filter specifically by customer or client name"
+        },
+        dateRange: {
+          type: "STRING",
+          description: "Relative date range: 'last_month', 'this_month', 'this_year', or 'overdue'"
+        },
+        limit: {
+          type: "INTEGER",
+          description: "Max number of invoices to return (default 10)"
+        }
+      }
+    }
+  },
+  {
+    name: "get_invoice_detail",
+    description: "Get full details of a specific invoice including client info, line items, taxes, and payment history by invoice ID or invoice number.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        invoiceId: {
+          type: "INTEGER",
+          description: "Numeric database ID of the invoice"
+        },
+        invoiceNumber: {
+          type: "STRING",
+          description: "Invoice number string (e.g. INV-2026-001)"
+        }
+      }
+    }
+  },
+  {
+    name: "create_invoice",
+    description: "Draft or create a new invoice for a client. If the client name does not exist, it can automatically search or create it.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        clientName: {
+          type: "STRING",
+          description: "The party/customer name for the invoice (e.g. ABC Traders)"
+        },
+        clientId: {
+          type: "INTEGER",
+          description: "Existing client ID if known"
+        },
+        clientPhone: {
+          type: "STRING",
+          description: "Client WhatsApp/Phone number if creating a new client on the fly"
+        },
+        items: {
+          type: "ARRAY",
+          description: "Array of line items with description, quantity, rate, amount",
+          items: {
+            type: "OBJECT",
+            properties: {
+              description: { type: "STRING" },
+              quantity: { type: "NUMBER" },
+              rate: { type: "NUMBER" },
+              amount: { type: "NUMBER" },
+              hsnCode: { type: "STRING" }
+            },
+            required: ["description", "rate"]
+          }
+        },
+        subtotal: {
+          type: "NUMBER",
+          description: "Subtotal amount before taxes (if no items array specified)"
+        },
+        taxRate: {
+          type: "NUMBER",
+          description: "GST tax percentage (e.g. 18 for 18% GST). Defaults to 18 if not specified."
+        },
+        discountAmount: {
+          type: "NUMBER",
+          description: "Discount amount in INR"
+        },
+        tdsRate: {
+          type: "NUMBER",
+          description: "TDS rate percentage (e.g. 1, 2, 10)"
+        },
+        dueDate: {
+          type: "STRING",
+          description: "Due date in YYYY-MM-DD format"
+        },
+        issueDate: {
+          type: "STRING",
+          description: "Issue date in YYYY-MM-DD format"
+        },
+        vehicleNumber: {
+          type: "STRING",
+          description: "Transport vehicle registration number (e.g. MH-04-GP-8842)"
+        },
+        lrNumber: {
+          type: "STRING",
+          description: "Lorry receipt / Bilty number (e.g. LR-994201)"
+        },
+        routeSource: {
+          type: "STRING",
+          description: "Origin / departure location (e.g. JNPT Navi Mumbai)"
+        },
+        routeDestination: {
+          type: "STRING",
+          description: "Destination location (e.g. Ahmedabad, Gujarat)"
+        },
+        ewayBillNumber: {
+          type: "STRING",
+          description: "Government E-Way bill number"
+        },
+        placeOfSupply: {
+          type: "STRING",
+          description: "2-digit state code or state name for GST Place of Supply"
+        },
+        notes: {
+          type: "STRING",
+          description: "Customer notes or remarks"
+        },
+        terms: {
+          type: "STRING",
+          description: "Payment terms & conditions"
+        },
+        confirmAction: {
+          type: "BOOLEAN",
+          description: "Set to true ONLY when user has confirmed invoice creation approval card."
+        }
+      },
+      required: ["clientName"]
+    }
+  },
+  {
+    name: "update_invoice_tax_and_totals",
+    description: "Update the tax rate (GST %), discount, or line items on an existing invoice and recalculate totals.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        invoiceId: {
+          type: "INTEGER",
+          description: "Database ID of the invoice to update"
+        },
+        taxRate: {
+          type: "NUMBER",
+          description: "New GST rate percentage (e.g. 18 for 18% GST)"
+        },
+        discountAmount: {
+          type: "NUMBER",
+          description: "New discount amount"
+        },
+        tdsRate: {
+          type: "NUMBER",
+          description: "TDS rate percentage if applicable"
+        }
+      },
+      required: ["invoiceId"]
+    }
+  },
+  {
+    name: "update_invoice_status",
+    description: "Update the status of an invoice to 'paid', 'pending', 'overdue', or 'partial'.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        invoiceId: {
+          type: "INTEGER",
+          description: "Database ID of the invoice"
+        },
+        status: {
+          type: "STRING",
+          description: "New status: 'paid', 'pending', 'overdue', 'partial'"
+        },
+        paidAmount: {
+          type: "STRING",
+          description: "Total amount paid so far"
+        }
+      },
+      required: ["invoiceId", "status"]
+    }
+  },
+  {
+    name: "cancel_invoice",
+    description: "Cancel an invoice with a reason (GST-compliant soft delete).",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        invoiceId: {
+          type: "INTEGER",
+          description: "Database ID of the invoice to cancel"
+        },
+        reason: {
+          type: "STRING",
+          description: "Reason for cancellation"
+        }
+      },
+      required: ["invoiceId"]
+    }
+  }
+];
+async function executeInvoiceTool(userId, functionName, args) {
+  switch (functionName) {
+    case "query_invoices": {
+      const { status, search, clientName, dateRange, limit = 10 } = args;
+      const invoicesList = await getInvoicesService(userId, {
+        status: status && status !== "all" ? status : void 0,
+        search: search || clientName || void 0,
+        limit: Math.min(50, limit)
+      });
+      let filtered = invoicesList;
+      if (dateRange) {
+        const now = /* @__PURE__ */ new Date();
+        if (dateRange === "last_month") {
+          const firstDayLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+          const lastDayLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+          const startStr = firstDayLastMonth.toISOString().split("T")[0];
+          const endStr = lastDayLastMonth.toISOString().split("T")[0];
+          filtered = filtered.filter((inv) => {
+            const date = inv.issueDate || inv.createdAt;
+            return date && date >= startStr && date <= endStr;
+          });
+        } else if (dateRange === "this_month") {
+          const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
+          filtered = filtered.filter((inv) => inv.issueDate >= firstDay);
+        } else if (dateRange === "overdue") {
+          const todayStr = now.toISOString().split("T")[0];
+          filtered = filtered.filter((inv) => inv.status !== "paid" && inv.dueDate < todayStr);
+        }
+      }
+      const totalAmount = filtered.reduce((sum, inv) => sum + parseFloat(inv.totalAmount || "0"), 0);
+      const totalPending = filtered.reduce((sum, inv) => {
+        if (inv.status === "paid") return sum;
+        const total = parseFloat(inv.totalAmount || "0");
+        const paid = parseFloat(inv.paidAmount || "0");
+        return sum + Math.max(0, total - paid);
+      }, 0);
+      return {
+        count: filtered.length,
+        totalInvoiced: `\u20B9${totalAmount.toLocaleString("en-IN")}`,
+        totalPending: `\u20B9${totalPending.toLocaleString("en-IN")}`,
+        invoices: filtered.slice(0, 15).map((inv) => ({
+          id: inv.id,
+          invoiceNumber: inv.invoiceNumber,
+          clientName: inv.client?.name || inv.client?.companyName || "Unknown Client",
+          clientPhone: inv.client?.phone || "",
+          issueDate: inv.issueDate,
+          dueDate: inv.dueDate,
+          status: inv.status,
+          totalAmount: `\u20B9${parseFloat(inv.totalAmount || "0").toLocaleString("en-IN")}`,
+          paidAmount: `\u20B9${parseFloat(inv.paidAmount || "0").toLocaleString("en-IN")}`,
+          shareToken: inv.shareToken
+        }))
+      };
+    }
+    case "get_invoice_detail": {
+      const { invoiceId, invoiceNumber } = args;
+      let invoice = null;
+      if (invoiceId) {
+        invoice = await getInvoiceByIdService(userId, Number(invoiceId));
+      } else if (invoiceNumber) {
+        invoice = await getPublicInvoiceService(invoiceNumber);
+      }
+      if (!invoice) {
+        return { error: "Invoice not found." };
+      }
+      return {
+        id: invoice.id,
+        invoiceNumber: invoice.invoiceNumber,
+        client: {
+          id: invoice.client?.id,
+          name: invoice.client?.name,
+          phone: invoice.client?.phone,
+          companyName: invoice.client?.companyName,
+          gstin: invoice.client?.gstin
+        },
+        issueDate: invoice.issueDate,
+        dueDate: invoice.dueDate,
+        status: invoice.status,
+        subtotal: `\u20B9${parseFloat(invoice.subtotal || "0").toLocaleString("en-IN")}`,
+        taxRate: `${invoice.taxRate}%`,
+        taxAmount: `\u20B9${parseFloat(invoice.taxAmount || "0").toLocaleString("en-IN")}`,
+        discountAmount: `\u20B9${parseFloat(invoice.discountAmount || "0").toLocaleString("en-IN")}`,
+        totalAmount: `\u20B9${parseFloat(invoice.totalAmount || "0").toLocaleString("en-IN")}`,
+        paidAmount: `\u20B9${parseFloat(invoice.paidAmount || "0").toLocaleString("en-IN")}`,
+        items: invoice.items,
+        notes: invoice.notes,
+        terms: invoice.terms,
+        shareToken: invoice.shareToken,
+        payments: invoice.payments || []
+      };
+    }
+    case "create_invoice": {
+      const {
+        clientName,
+        clientId,
+        clientPhone,
+        items,
+        subtotal,
+        taxRate = 18,
+        discountAmount = 0,
+        tdsRate = 0,
+        dueDate,
+        issueDate,
+        vehicleNumber,
+        lrNumber,
+        routeSource,
+        routeDestination,
+        ewayBillNumber,
+        placeOfSupply,
+        notes,
+        terms,
+        confirmAction = false
+      } = args;
+      const { users: users3 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
+      const { db: db3 } = await Promise.resolve().then(() => (init_db(), db_exports));
+      const { eq: eq14 } = await import("drizzle-orm");
+      const merchantRows = await db3.select().from(users3).where(eq14(users3.id, userId)).limit(1);
+      const merchant = merchantRows[0] || {};
+      let resolvedClientId = clientId;
+      let resolvedClientName = clientName;
+      let matchedClient = null;
+      if (!resolvedClientId) {
+        const existingClients = await getClientsService(userId);
+        matchedClient = existingClients.find(
+          (c) => c.name.toLowerCase().includes(clientName.toLowerCase()) || c.companyName && c.companyName.toLowerCase().includes(clientName.toLowerCase())
+        );
+        if (matchedClient) {
+          resolvedClientId = matchedClient.id;
+          resolvedClientName = matchedClient.name;
+        } else if (confirmAction) {
+          const newClient = await createClientService(userId, {
+            name: clientName,
+            phone: clientPhone || "9999999999",
+            companyName: clientName
+          });
+          resolvedClientId = newClient.id;
+          resolvedClientName = newClient.name;
+          matchedClient = newClient;
+        }
+      }
+      let computedItems = items;
+      if (!computedItems || computedItems.length === 0) {
+        const baseAmount = Number(subtotal) || 5e4;
+        computedItems = [
+          {
+            description: routeSource && routeDestination ? `Freight Transportation: ${routeSource} \u2192 ${routeDestination}` : `Professional Services for ${clientName}`,
+            quantity: 1,
+            rate: baseAmount,
+            amount: baseAmount,
+            hsnCode: routeSource ? "9965" : "9983",
+            uqc: routeSource ? "TRIP" : "NOS"
+          }
+        ];
+      }
+      const calcSubtotal = computedItems.reduce((acc, item) => acc + (Number(item.amount) || Number(item.quantity || 1) * Number(item.rate || 0)), 0);
+      const calcTaxAmount = calcSubtotal * Number(taxRate) / 100;
+      const calcTdsAmount = calcSubtotal * Number(tdsRate) / 100;
+      const calcTotal = Math.max(0, calcSubtotal + calcTaxAmount - Number(discountAmount) - calcTdsAmount);
+      const now = /* @__PURE__ */ new Date();
+      const todayStr = issueDate || now.toISOString().split("T")[0];
+      const dueStr = dueDate || new Date(now.getTime() + 15 * 24 * 60 * 60 * 1e3).toISOString().split("T")[0];
+      const existingInvoices = await getInvoicesService(userId, { limit: 1 });
+      const nextSeq = existingInvoices.length > 0 ? existingInvoices[0].id + 101 : 101;
+      const invoiceNumber = `INV-${now.getFullYear()}-${String(nextSeq).padStart(3, "0")}`;
+      const resolvedPlaceOfSupply = placeOfSupply || matchedClient?.gstin?.substring(0, 2) || merchant?.gstin?.substring(0, 2) || "27";
+      if (!confirmAction) {
+        return {
+          requiresConfirmation: true,
+          actionType: "create_invoice",
+          preview: {
+            clientName: resolvedClientName,
+            clientId: resolvedClientId,
+            invoiceNumber,
+            issueDate: todayStr,
+            dueDate: dueStr,
+            items: computedItems,
+            vehicleNumber,
+            lrNumber,
+            routeSource,
+            routeDestination,
+            ewayBillNumber,
+            placeOfSupply: resolvedPlaceOfSupply,
+            subtotal: `\u20B9${calcSubtotal.toLocaleString("en-IN")}`,
+            taxRate: `${taxRate}%`,
+            taxAmount: `\u20B9${calcTaxAmount.toLocaleString("en-IN")}`,
+            discountAmount: `\u20B9${Number(discountAmount).toLocaleString("en-IN")}`,
+            tdsAmount: `\u20B9${calcTdsAmount.toLocaleString("en-IN")}`,
+            totalAmount: `\u20B9${calcTotal.toLocaleString("en-IN")}`
+          },
+          confirmationMessage: `Please confirm creating GST invoice **${invoiceNumber}** for **${resolvedClientName}** totaling **\u20B9${calcTotal.toLocaleString("en-IN")}** (Subtotal: \u20B9${calcSubtotal.toLocaleString("en-IN")} + ${taxRate}% GST: \u20B9${calcTaxAmount.toLocaleString("en-IN")}).`,
+          payload: {
+            clientName: resolvedClientName,
+            clientId: resolvedClientId,
+            clientPhone: clientPhone || matchedClient?.phone || "9999999999",
+            items: computedItems,
+            subtotal: calcSubtotal,
+            taxRate,
+            discountAmount,
+            tdsRate,
+            dueDate: dueStr,
+            issueDate: todayStr,
+            vehicleNumber,
+            lrNumber,
+            routeSource,
+            routeDestination,
+            ewayBillNumber,
+            placeOfSupply: resolvedPlaceOfSupply,
+            notes: notes || "Thank you for your business!",
+            terms: terms || "Payment due within 15 days of invoice date.",
+            confirmAction: true
+          }
+        };
+      }
+      const created = await createInvoiceService(userId, {
+        clientId: resolvedClientId,
+        invoiceNumber,
+        issueDate: todayStr,
+        dueDate: dueStr,
+        items: computedItems,
+        subtotal: calcSubtotal.toFixed(2),
+        taxRate: Number(taxRate).toFixed(2),
+        taxAmount: calcTaxAmount.toFixed(2),
+        tdsRate: Number(tdsRate).toFixed(2),
+        tdsAmount: calcTdsAmount.toFixed(2),
+        discountAmount: Number(discountAmount).toFixed(2),
+        totalAmount: calcTotal.toFixed(2),
+        vehicleNumber: vehicleNumber || null,
+        lrNumber: lrNumber || null,
+        routeSource: routeSource || null,
+        routeDestination: routeDestination || null,
+        ewayBillNumber: ewayBillNumber || null,
+        placeOfSupply: resolvedPlaceOfSupply,
+        notes: notes || "Thank you for your business!",
+        terms: terms || "Payment due within 15 days of invoice date."
+      });
+      return {
+        success: true,
+        invoiceId: created.id,
+        invoiceNumber: created.invoiceNumber,
+        clientName: resolvedClientName,
+        totalAmount: `\u20B9${calcTotal.toLocaleString("en-IN")}`,
+        subtotal: `\u20B9${calcSubtotal.toLocaleString("en-IN")}`,
+        taxAmount: `\u20B9${calcTaxAmount.toLocaleString("en-IN")}`,
+        taxRate: `${taxRate}%`,
+        status: created.status,
+        dueDate: created.dueDate,
+        shareToken: created.shareToken,
+        message: `Successfully created invoice ${created.invoiceNumber} for ${resolvedClientName} of \u20B9${calcTotal.toLocaleString("en-IN")}.`
+      };
+    }
+    case "update_invoice_tax_and_totals": {
+      const { invoiceId, taxRate, discountAmount, tdsRate } = args;
+      const invoice = await getInvoiceByIdService(userId, Number(invoiceId));
+      if (!invoice) return { error: "Invoice not found." };
+      const subtotal = parseFloat(invoice.subtotal || "0");
+      const newTaxRate = taxRate !== void 0 ? Number(taxRate) : parseFloat(invoice.taxRate || "0");
+      const newTaxAmount = subtotal * newTaxRate / 100;
+      const newDiscount = discountAmount !== void 0 ? Number(discountAmount) : parseFloat(invoice.discountAmount || "0");
+      const newTdsRate = tdsRate !== void 0 ? Number(tdsRate) : parseFloat(invoice.tdsRate || "0");
+      const newTdsAmount = subtotal * newTdsRate / 100;
+      const newTotal = Math.max(0, subtotal + newTaxAmount - newDiscount - newTdsAmount);
+      const updated = await db.update(invoices).set({
+        taxRate: newTaxRate.toFixed(2),
+        taxAmount: newTaxAmount.toFixed(2),
+        discountAmount: newDiscount.toFixed(2),
+        tdsRate: newTdsRate.toFixed(2),
+        tdsAmount: newTdsAmount.toFixed(2),
+        totalAmount: newTotal.toFixed(2),
+        updatedAt: /* @__PURE__ */ new Date()
+      }).where(and8(eq12(invoices.id, Number(invoiceId)), eq12(invoices.userId, userId))).returning();
+      const resRow = updated[0];
+      return {
+        success: true,
+        invoiceId: resRow.id,
+        invoiceNumber: resRow.invoiceNumber,
+        subtotal: `\u20B9${subtotal.toLocaleString("en-IN")}`,
+        taxRate: `${newTaxRate}%`,
+        taxAmount: `\u20B9${newTaxAmount.toLocaleString("en-IN")}`,
+        totalAmount: `\u20B9${newTotal.toLocaleString("en-IN")}`,
+        message: `Updated invoice ${resRow.invoiceNumber}: ${newTaxRate}% GST (\u20B9${newTaxAmount.toLocaleString("en-IN")}) added. New Total is \u20B9${newTotal.toLocaleString("en-IN")}.`
+      };
+    }
+    case "update_invoice_status": {
+      const { invoiceId, status, paidAmount } = args;
+      const updated = await updateInvoiceStatusService(userId, Number(invoiceId), status, paidAmount);
+      return {
+        success: true,
+        invoiceId: updated.id,
+        invoiceNumber: updated.invoiceNumber,
+        status: updated.status,
+        paidAmount: `\u20B9${parseFloat(updated.paidAmount || "0").toLocaleString("en-IN")}`,
+        message: `Invoice ${updated.invoiceNumber} status updated to '${updated.status}'.`
+      };
+    }
+    case "cancel_invoice": {
+      const { invoiceId, reason } = args;
+      const cancelled = await cancelInvoiceService(userId, Number(invoiceId), reason);
+      return {
+        success: true,
+        invoiceId: cancelled.id,
+        invoiceNumber: cancelled.invoiceNumber,
+        status: "cancelled",
+        message: `Invoice ${cancelled.invoiceNumber} has been cancelled (GST compliant table entry preserved).`
+      };
+    }
+    default:
+      throw new Error(`Unknown invoice tool action: ${functionName}`);
+  }
+}
+
+// src/services/tools/client.tool.ts
+var clientToolDeclarations = [
+  {
+    name: "search_clients",
+    description: "Search or list clients/parties in the user directory by name, phone, company, or status.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        query: {
+          type: "STRING",
+          description: "Search query for client name, phone number, company name, or GSTIN"
+        }
+      }
+    }
+  },
+  {
+    name: "create_client",
+    description: "Add a new client/party into the directory.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        name: {
+          type: "STRING",
+          description: "Contact or party name (Required)"
+        },
+        phone: {
+          type: "STRING",
+          description: "WhatsApp mobile number (Required)"
+        },
+        companyName: {
+          type: "STRING",
+          description: "Business or legal company name"
+        },
+        gstin: {
+          type: "STRING",
+          description: "15-character GSTIN number"
+        },
+        address: {
+          type: "STRING",
+          description: "Billing address"
+        },
+        email: {
+          type: "STRING",
+          description: "Email address"
+        },
+        paymentTermDays: {
+          type: "INTEGER",
+          description: "Default payment terms in days (e.g. 7, 15, 30)"
+        }
+      },
+      required: ["name", "phone"]
+    }
+  }
+];
+async function executeClientTool(userId, functionName, args) {
+  switch (functionName) {
+    case "search_clients": {
+      const { query } = args;
+      const allClients = await getClientsService(userId);
+      let filtered = allClients;
+      if (query && query.trim()) {
+        const q = query.trim().toLowerCase();
+        filtered = allClients.filter(
+          (c) => c.name.toLowerCase().includes(q) || c.phone.includes(q) || c.companyName && c.companyName.toLowerCase().includes(q) || c.gstin && c.gstin.toLowerCase().includes(q)
+        );
+      }
+      return {
+        count: filtered.length,
+        clients: filtered.map((c) => ({
+          id: c.id,
+          name: c.name,
+          companyName: c.companyName || "",
+          phone: c.phone,
+          gstin: c.gstin || "",
+          email: c.email || "",
+          paymentTermDays: c.paymentTermDays,
+          isActive: c.isActive
+        }))
+      };
+    }
+    case "create_client": {
+      const created = await createClientService(userId, args);
+      return {
+        success: true,
+        client: {
+          id: created.id,
+          name: created.name,
+          companyName: created.companyName,
+          phone: created.phone,
+          gstin: created.gstin
+        },
+        message: `Client "${created.name}" (${created.companyName || created.phone}) was successfully registered.`
+      };
+    }
+    default:
+      throw new Error(`Unknown client tool action: ${functionName}`);
+  }
+}
+
+// src/services/tools/payment.tool.ts
+var paymentToolDeclarations = [
+  {
+    name: "record_payment",
+    description: "Record an incoming payment (UPI, Bank Transfer, Cash, Cheque) against an invoice and update invoice status.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        invoiceId: {
+          type: "INTEGER",
+          description: "Database ID of the invoice being paid (Required)"
+        },
+        amount: {
+          type: "NUMBER",
+          description: "Payment amount received in INR (Required)"
+        },
+        paymentMethod: {
+          type: "STRING",
+          description: "Payment method: 'upi', 'bank_transfer', 'cash', 'cheque' (default 'upi')"
+        },
+        paymentDate: {
+          type: "STRING",
+          description: "Date of payment in YYYY-MM-DD format (defaults to today)"
+        },
+        referenceNumber: {
+          type: "STRING",
+          description: "Transaction reference ID / UTR / Cheque number"
+        },
+        notes: {
+          type: "STRING",
+          description: "Notes on the payment"
+        },
+        confirmAction: {
+          type: "BOOLEAN",
+          description: "Set to true ONLY if user explicitly confirmed recording the payment."
+        }
+      },
+      required: ["invoiceId", "amount"]
+    }
+  },
+  {
+    name: "get_payments_history",
+    description: "List recent payment transactions and settlement history across invoices.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        limit: {
+          type: "INTEGER",
+          description: "Max number of payments to retrieve (default 10)"
+        }
+      }
+    }
+  }
+];
+async function executePaymentTool(userId, functionName, args) {
+  switch (functionName) {
+    case "record_payment": {
+      const {
+        invoiceId,
+        amount,
+        paymentMethod = "upi",
+        paymentDate,
+        referenceNumber = "",
+        notes = "",
+        confirmAction = false
+      } = args;
+      const invoice = await getInvoiceByIdService(userId, Number(invoiceId));
+      if (!invoice) return { error: `Invoice #${invoiceId} not found.` };
+      const numAmount = Number(amount);
+      const totalAmount = parseFloat(invoice.totalAmount || "0");
+      const alreadyPaid = parseFloat(invoice.paidAmount || "0");
+      const remainingBalance = Math.max(0, totalAmount - alreadyPaid);
+      if (!confirmAction) {
+        return {
+          requiresConfirmation: true,
+          actionType: "record_payment",
+          preview: {
+            invoiceId,
+            invoiceNumber: invoice.invoiceNumber,
+            clientName: invoice.client?.name || "Customer",
+            paymentAmount: `\u20B9${numAmount.toLocaleString("en-IN")}`,
+            invoiceTotal: `\u20B9${totalAmount.toLocaleString("en-IN")}`,
+            currentPaid: `\u20B9${alreadyPaid.toLocaleString("en-IN")}`,
+            remainingAfterPayment: `\u20B9${Math.max(0, remainingBalance - numAmount).toLocaleString("en-IN")}`,
+            paymentMethod,
+            referenceNumber
+          },
+          confirmationMessage: `Please confirm recording a payment of **\u20B9${numAmount.toLocaleString("en-IN")}** via **${paymentMethod.toUpperCase()}** against invoice **${invoice.invoiceNumber}** (${invoice.client?.name}).`,
+          payload: {
+            invoiceId,
+            amount: numAmount,
+            paymentMethod,
+            paymentDate: paymentDate || (/* @__PURE__ */ new Date()).toISOString().split("T")[0],
+            referenceNumber,
+            notes,
+            confirmAction: true
+          }
+        };
+      }
+      const recorded = await recordPaymentService(userId, {
+        invoiceId: Number(invoiceId),
+        amount: numAmount,
+        paymentMethod,
+        paymentDate: paymentDate || (/* @__PURE__ */ new Date()).toISOString().split("T")[0],
+        referenceNumber,
+        notes
+      });
+      const updatedInvoice = await getInvoiceByIdService(userId, Number(invoiceId));
+      return {
+        success: true,
+        paymentId: recorded.id,
+        invoiceNumber: invoice.invoiceNumber,
+        amountRecorded: `\u20B9${numAmount.toLocaleString("en-IN")}`,
+        newInvoiceStatus: updatedInvoice.status,
+        totalPaidOnInvoice: `\u20B9${parseFloat(updatedInvoice.paidAmount || "0").toLocaleString("en-IN")}`,
+        message: `Payment of \u20B9${numAmount.toLocaleString("en-IN")} successfully recorded for invoice ${invoice.invoiceNumber}. New status is '${updatedInvoice.status}'.`
+      };
+    }
+    case "get_payments_history": {
+      const { limit = 10 } = args;
+      const paymentsList = await getPaymentsService(userId);
+      return {
+        count: paymentsList.length,
+        payments: paymentsList.slice(0, limit).map((p) => ({
+          id: p.id,
+          invoiceId: p.invoiceId,
+          amount: `\u20B9${parseFloat(p.amount || "0").toLocaleString("en-IN")}`,
+          paymentDate: p.paymentDate,
+          paymentMethod: p.paymentMethod,
+          referenceNumber: p.referenceNumber
+        }))
+      };
+    }
+    default:
+      throw new Error(`Unknown payment tool action: ${functionName}`);
+  }
+}
+
+// src/services/tools/analytics.tool.ts
+var analyticsToolDeclarations = [
+  {
+    name: "get_dashboard_analytics",
+    description: "Retrieve real-time business health metrics: total revenue billed, amount collected, pending receivables, overdue amounts, collection rate, and 30-day cash flow projections.",
+    parameters: {
+      type: "OBJECT",
+      properties: {}
+    }
+  },
+  {
+    name: "get_party_risk_scores",
+    description: "Retrieve AI credit scoring and payment delay risk categorizations (Low/Medium/High risk) across customer directory.",
+    parameters: {
+      type: "OBJECT",
+      properties: {}
+    }
+  }
+];
+async function executeAnalyticsTool(userId, functionName, _args) {
+  switch (functionName) {
+    case "get_dashboard_analytics": {
+      const invoicesList = await getInvoicesByUserId(userId);
+      const paymentsList = await getPaymentsForUser(userId);
+      const activeInvoices = invoicesList.filter((inv) => inv.status !== "cancelled" && !inv.isCancelled);
+      let totalInvoiced = 0;
+      let totalCollected = 0;
+      let totalPending = 0;
+      let totalOverdue = 0;
+      const todayStr = (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
+      activeInvoices.forEach((inv) => {
+        const tot = parseFloat(inv.totalAmount || "0");
+        const pd = parseFloat(inv.paidAmount || "0");
+        const outstanding = Math.max(0, tot - pd);
+        totalInvoiced += tot;
+        totalCollected += pd;
+        if (inv.status === "paid" || outstanding <= 0) {
+        } else if (inv.status === "overdue" || inv.dueDate && inv.dueDate < todayStr) {
+          totalOverdue += outstanding;
+        } else {
+          totalPending += outstanding;
+        }
+      });
+      const collectionRate = totalInvoiced > 0 ? Math.round(totalCollected / totalInvoiced * 100) : 0;
+      return {
+        totalInvoiced: `\u20B9${totalInvoiced.toLocaleString("en-IN")}`,
+        totalCollected: `\u20B9${totalCollected.toLocaleString("en-IN")}`,
+        totalPending: `\u20B9${totalPending.toLocaleString("en-IN")}`,
+        totalOverdue: `\u20B9${totalOverdue.toLocaleString("en-IN")}`,
+        collectionRate: `${collectionRate}%`,
+        activeInvoicesCount: activeInvoices.length,
+        totalPaymentsLogged: paymentsList.length
+      };
+    }
+    case "get_party_risk_scores": {
+      const invoicesList = await getInvoicesByUserId(userId);
+      const clientsList = await getClientsByUserId(userId);
+      const activeInvoices = invoicesList.filter((inv) => inv.status !== "cancelled" && !inv.isCancelled);
+      const todayStr = (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
+      const clientRisks = clientsList.filter((c) => c.isActive !== false).map((c) => {
+        const clientInvs = activeInvoices.filter((i) => i.clientId === c.id);
+        if (clientInvs.length === 0) {
+          return {
+            name: c.name,
+            companyName: c.companyName || c.name,
+            score: 95,
+            riskLevel: "LOW",
+            status: "Reliable / New Party",
+            overdueAmount: "\u20B90"
+          };
+        }
+        let overdueAmount = 0;
+        let billedAmount = 0;
+        clientInvs.forEach((i) => {
+          const tot = parseFloat(i.totalAmount || "0");
+          const pd = parseFloat(i.paidAmount || "0");
+          billedAmount += tot;
+          if (i.status === "overdue" || i.dueDate < todayStr && i.status !== "paid") {
+            overdueAmount += Math.max(0, tot - pd);
+          }
+        });
+        const ratio = billedAmount > 0 ? overdueAmount / billedAmount : 0;
+        let score = Math.max(20, Math.min(99, 100 - Math.round(ratio * 70)));
+        const riskLevel = score >= 80 ? "LOW" : score >= 50 ? "MEDIUM" : "HIGH";
+        return {
+          name: c.name,
+          companyName: c.companyName || c.name,
+          score,
+          riskLevel,
+          overdueAmount: `\u20B9${overdueAmount.toLocaleString("en-IN")}`
+        };
+      });
+      return {
+        clientsEvaluated: clientRisks.length,
+        highRiskParties: clientRisks.filter((c) => c.riskLevel === "HIGH"),
+        mediumRiskParties: clientRisks.filter((c) => c.riskLevel === "MEDIUM"),
+        lowRiskParties: clientRisks.filter((c) => c.riskLevel === "LOW")
+      };
+    }
+    default:
+      throw new Error(`Unknown analytics tool action: ${functionName}`);
+  }
+}
+
+// src/services/tools/whatsapp.tool.ts
+init_db();
+init_schema();
+var whatsappToolDeclarations = [
+  {
+    name: "send_whatsapp_invoice",
+    description: "Send an invoice with payment link or PDF via WhatsApp directly to the customer mobile number.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        invoiceId: {
+          type: "INTEGER",
+          description: "Database ID of the invoice to send (Required)"
+        },
+        recipientPhone: {
+          type: "STRING",
+          description: "WhatsApp number to override client default phone if needed"
+        },
+        customMessage: {
+          type: "STRING",
+          description: "Optional custom note/text message to include"
+        }
+      },
+      required: ["invoiceId"]
+    }
+  },
+  {
+    name: "send_payment_reminder",
+    description: "Send a formatted payment reminder notice (polite, standard, or urgent) via WhatsApp for pending/overdue invoices.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        invoiceId: {
+          type: "INTEGER",
+          description: "Database ID of the invoice (Required)"
+        },
+        tone: {
+          type: "STRING",
+          description: "Reminder tone: 'polite', 'standard', 'urgent', or 'overdue' (default 'standard')"
+        }
+      },
+      required: ["invoiceId"]
+    }
+  }
+];
+async function executeWhatsAppTool(userId, functionName, args) {
+  switch (functionName) {
+    case "send_whatsapp_invoice": {
+      const { invoiceId, recipientPhone, customMessage } = args;
+      const invoice = await getInvoiceByIdService(userId, Number(invoiceId));
+      if (!invoice) return { error: `Invoice #${invoiceId} not found.` };
+      const targetPhone = recipientPhone || invoice.client?.phone;
+      if (!targetPhone) return { error: "No recipient phone number found for this invoice client." };
+      const merchant = invoice.merchant;
+      const clientName = invoice.client?.name || "Customer";
+      const totalAmount = `\u20B9${parseFloat(invoice.totalAmount || "0").toLocaleString("en-IN")}`;
+      const dueDate = invoice.dueDate;
+      const invNum = invoice.invoiceNumber;
+      const payLink = `${process.env.APP_URL || "https://kwikbill.in"}/pay/${invoice.shareToken || invNum}`;
+      const messageContent = customMessage || `Dear ${clientName},
+
+Please find attached Invoice *${invNum}* from *${merchant?.businessName || "Us"}* for *${totalAmount}*.
+
+\u{1F4C5} Due Date: ${dueDate}
+\u{1F4B3} Instant UPI / Online Payment Link: ${payLink}
+
+Thank you for your business!`;
+      const result = await sendWhatsAppMessage({
+        recipientPhone: targetPhone,
+        messageContent,
+        recipientName: clientName,
+        invoiceNumber: invNum,
+        invoiceId: invoice.id,
+        totalAmount: invoice.totalAmount,
+        dueDate
+      });
+      await db.insert(reminderLogs).values({
+        userId,
+        invoiceId: invoice.id,
+        clientId: invoice.client.id,
+        channel: "whatsapp",
+        templateType: "standard",
+        messageContent,
+        recipientPhone: targetPhone,
+        status: result.directApiSent ? "sent" : "delivered"
+      });
+      return {
+        success: true,
+        directApiSent: result.directApiSent,
+        deliveryStatus: result.deliveryStatus,
+        whatsappUrl: result.whatsappUrl,
+        invoiceNumber: invNum,
+        recipientPhone: targetPhone,
+        message: result.directApiSent ? `Invoice ${invNum} was sent via WhatsApp Meta API to ${targetPhone}!` : `WhatsApp message link prepared for ${targetPhone} (Click link to send if Meta API is not configured).`
+      };
+    }
+    case "send_payment_reminder": {
+      const { invoiceId, tone = "standard" } = args;
+      const invoice = await getInvoiceByIdService(userId, Number(invoiceId));
+      if (!invoice) return { error: `Invoice #${invoiceId} not found.` };
+      const targetPhone = invoice.client?.phone;
+      if (!targetPhone) return { error: "No phone number for this client." };
+      const clientName = invoice.client?.name || "Customer";
+      const outstanding = Math.max(0, parseFloat(invoice.totalAmount || "0") - parseFloat(invoice.paidAmount || "0"));
+      const outstandingStr = `\u20B9${outstanding.toLocaleString("en-IN")}`;
+      const invNum = invoice.invoiceNumber;
+      const payLink = `${process.env.APP_URL || "https://kwikbill.in"}/pay/${invoice.shareToken || invNum}`;
+      let msg = "";
+      if (tone === "polite") {
+        msg = `Hi ${clientName}, this is a gentle reminder that invoice *${invNum}* of *${outstandingStr}* is due on ${invoice.dueDate}. Pay easily here: ${payLink}. Thank you!`;
+      } else if (tone === "urgent" || tone === "overdue") {
+        msg = `\u26A0\uFE0F URGENT: Invoice *${invNum}* for *${outstandingStr}* is overdue since ${invoice.dueDate}. Please clear the outstanding balance immediately via: ${payLink}`;
+      } else {
+        msg = `Hello ${clientName}, payment reminder for Invoice *${invNum}* totaling *${outstandingStr}* due by ${invoice.dueDate}. Settle securely: ${payLink}`;
+      }
+      const result = await sendWhatsAppMessage({
+        recipientPhone: targetPhone,
+        messageContent: msg,
+        recipientName: clientName,
+        invoiceNumber: invNum,
+        invoiceId: invoice.id,
+        totalAmount: outstanding,
+        dueDate: invoice.dueDate
+      });
+      await db.insert(reminderLogs).values({
+        userId,
+        invoiceId: invoice.id,
+        clientId: invoice.client.id,
+        channel: "whatsapp",
+        templateType: tone,
+        messageContent: msg,
+        recipientPhone: targetPhone,
+        status: result.directApiSent ? "sent" : "delivered"
+      });
+      return {
+        success: true,
+        directApiSent: result.directApiSent,
+        deliveryStatus: result.deliveryStatus,
+        whatsappUrl: result.whatsappUrl,
+        invoiceNumber: invNum,
+        message: `Payment reminder (${tone}) sent to ${clientName} (${targetPhone})!`
+      };
+    }
+    default:
+      throw new Error(`Unknown WhatsApp tool action: ${functionName}`);
+  }
+}
+
+// src/lib/qrCode.ts
+import QRCode from "qrcode";
+async function generateLocalQrDataUrl(text2) {
+  try {
+    return await QRCode.toDataURL(text2, {
+      errorCorrectionLevel: "M",
+      margin: 1,
+      width: 240,
+      color: {
+        dark: "#0f172a",
+        light: "#ffffff"
+      }
+    });
+  } catch (err) {
+    console.error("Failed to generate local QR code:", err);
+    return "";
+  }
+}
+
+// src/lib/gstCompliance.ts
+var INDIAN_STATES = [
+  { code: "01", name: "Jammu & Kashmir" },
+  { code: "02", name: "Himachal Pradesh" },
+  { code: "03", name: "Punjab" },
+  { code: "04", name: "Chandigarh" },
+  { code: "05", name: "Uttarakhand" },
+  { code: "06", name: "Haryana" },
+  { code: "07", name: "Delhi" },
+  { code: "08", name: "Rajasthan" },
+  { code: "09", name: "Uttar Pradesh" },
+  { code: "10", name: "Bihar" },
+  { code: "11", name: "Sikkim" },
+  { code: "12", name: "Arunachal Pradesh" },
+  { code: "13", name: "Nagaland" },
+  { code: "14", name: "Manipur" },
+  { code: "15", name: "Mizoram" },
+  { code: "16", name: "Tripura" },
+  { code: "17", name: "Meghalaya" },
+  { code: "18", name: "Assam" },
+  { code: "19", name: "West Bengal" },
+  { code: "20", name: "Jharkhand" },
+  { code: "21", name: "Odisha" },
+  { code: "22", name: "Chhattisgarh" },
+  { code: "23", name: "Madhya Pradesh" },
+  { code: "24", name: "Gujarat" },
+  { code: "26", name: "Dadra & Nagar Haveli and Daman & Diu" },
+  { code: "27", name: "Maharashtra" },
+  { code: "29", name: "Karnataka" },
+  { code: "30", name: "Goa" },
+  { code: "31", name: "Lakshadweep" },
+  { code: "32", name: "Kerala" },
+  { code: "33", name: "Tamil Nadu" },
+  { code: "34", name: "Puducherry" },
+  { code: "35", name: "Andaman & Nicobar Islands" },
+  { code: "36", name: "Telangana" },
+  { code: "37", name: "Andhra Pradesh" },
+  { code: "38", name: "Ladakh" },
+  { code: "97", name: "Other Territory" }
+];
+function getStateCodeFromGstin(gstin) {
+  if (!gstin) return null;
+  const clean = gstin.trim();
+  if (clean.length >= 2 && /^\d{2}/.test(clean)) {
+    return clean.substring(0, 2);
+  }
+  return null;
+}
+function getStateNameOrFormatted(codeOrName) {
+  if (!codeOrName) return "As per Billing Address";
+  const matched = INDIAN_STATES.find((s) => s.code === codeOrName || s.name.toLowerCase() === codeOrName.toLowerCase());
+  if (matched) {
+    return `${matched.code} - ${matched.name}`;
+  }
+  return codeOrName;
+}
+function calculateGstBreakdown(taxRateNum, taxableAmount, supplierGstinOrState, placeOfSupplyOrClientGstin, forceInterState) {
+  if (taxRateNum <= 0 || taxableAmount <= 0) {
+    return {
+      isInterState: false,
+      taxRate: 0,
+      cgstRate: 0,
+      cgstAmount: 0,
+      sgstRate: 0,
+      sgstAmount: 0,
+      igstRate: 0,
+      igstAmount: 0,
+      totalTax: 0
+    };
+  }
+  const supplierCode = getStateCodeFromGstin(supplierGstinOrState) || (supplierGstinOrState && supplierGstinOrState.length === 2 ? supplierGstinOrState : null);
+  const clientCode = getStateCodeFromGstin(placeOfSupplyOrClientGstin) || (placeOfSupplyOrClientGstin && placeOfSupplyOrClientGstin.length === 2 ? placeOfSupplyOrClientGstin : null);
+  let isInterState = false;
+  if (forceInterState !== void 0) {
+    isInterState = forceInterState;
+  } else if (supplierCode && clientCode) {
+    isInterState = supplierCode !== clientCode;
+  }
+  const totalTax = taxableAmount * taxRateNum / 100;
+  if (isInterState) {
+    return {
+      isInterState: true,
+      taxRate: taxRateNum,
+      cgstRate: 0,
+      cgstAmount: 0,
+      sgstRate: 0,
+      sgstAmount: 0,
+      igstRate: taxRateNum,
+      igstAmount: totalTax,
+      totalTax
+    };
+  } else {
+    const halfRate = taxRateNum / 2;
+    const halfTax = totalTax / 2;
+    return {
+      isInterState: false,
+      taxRate: taxRateNum,
+      cgstRate: halfRate,
+      cgstAmount: halfTax,
+      sgstRate: halfRate,
+      sgstAmount: halfTax,
+      igstRate: 0,
+      igstAmount: 0,
+      totalTax
+    };
+  }
+}
+var STATUTORY_INVOICE_DISCLAIMER = "This is a computer-generated Tax Invoice issued under Rule 46 of the Central Goods and Services Tax (CGST) Rules, 2017 and the Information Technology Act, 2000. It does not require a physical signature.";
+
+// src/services/tools/pdf.tool.ts
+var puppeteerModule = null;
+async function getPuppeteer() {
+  if (puppeteerModule) return puppeteerModule;
+  try {
+    puppeteerModule = await import("puppeteer");
+    return puppeteerModule;
+  } catch (err) {
+    console.error("Failed to import puppeteer:", err);
+    return null;
+  }
+}
+var pdfToolDeclarations = [
+  {
+    name: "generate_invoice_pdf",
+    description: "Generate a print-ready, GST-compliant PDF document for an invoice and return the download URL.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        invoiceId: {
+          type: "INTEGER",
+          description: "Database ID of the invoice to render (Required)"
+        }
+      },
+      required: ["invoiceId"]
+    }
+  }
+];
+function numberToIndianWords(num) {
+  const a = [
+    "",
+    "One ",
+    "Two ",
+    "Three ",
+    "Four ",
+    "Five ",
+    "Six ",
+    "Seven ",
+    "Eight ",
+    "Nine ",
+    "Ten ",
+    "Eleven ",
+    "Twelve ",
+    "Thirteen ",
+    "Fourteen ",
+    "Fifteen ",
+    "Sixteen ",
+    "Seventeen ",
+    "Eighteen ",
+    "Nineteen "
+  ];
+  const b = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
+  const n = Math.floor(Math.abs(num));
+  if (n === 0) return "Zero Rupees Only";
+  function inWords(n2) {
+    let str = "";
+    if (n2 >= 1e7) {
+      str += inWords(Math.floor(n2 / 1e7)) + "Crore ";
+      n2 %= 1e7;
+    }
+    if (n2 >= 1e5) {
+      str += inWords(Math.floor(n2 / 1e5)) + "Lakh ";
+      n2 %= 1e5;
+    }
+    if (n2 >= 1e3) {
+      str += inWords(Math.floor(n2 / 1e3)) + "Thousand ";
+      n2 %= 1e3;
+    }
+    if (n2 >= 100) {
+      str += inWords(Math.floor(n2 / 100)) + "Hundred ";
+      n2 %= 100;
+    }
+    if (n2 > 0) {
+      if (n2 < 20) str += a[n2];
+      else {
+        str += b[Math.floor(n2 / 10)] + (n2 % 10 !== 0 ? " " + a[n2 % 10] : " ");
+      }
+    }
+    return str;
+  }
+  return `${inWords(n).trim()} Rupees Only`;
+}
+function escapeHtml(str) {
+  if (str === null || str === void 0) return "";
+  return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+}
+function sanitizeBrandColor(color) {
+  if (color && /^#[0-9a-fA-F]{6}$/.test(color.trim())) {
+    return color.trim();
+  }
+  return "#4f46e5";
+}
+function sanitizeLogoUrl(url) {
+  if (!url || typeof url !== "string") return "";
+  const trimmed = url.trim();
+  if (trimmed.startsWith("https://") || trimmed.startsWith("data:image/")) {
+    return escapeHtml(trimmed);
+  }
+  return "";
+}
+async function renderInvoiceHtml(invoice, merchant) {
+  const items = Array.isArray(invoice.items) ? invoice.items : [];
+  const brandColor = sanitizeBrandColor(merchant?.brandColor);
+  const logoUrl = sanitizeLogoUrl(merchant?.logoUrl);
+  const subtotal = parseFloat(invoice.subtotal || "0");
+  const taxRate = parseFloat(invoice.taxRate || "0");
+  const discountAmount = parseFloat(invoice.discountAmount || "0");
+  const tdsAmount = parseFloat(invoice.tdsAmount || "0");
+  const totalAmount = parseFloat(invoice.totalAmount || "0");
+  const paidAmount = parseFloat(invoice.paidAmount || "0");
+  const balanceDue = Math.max(0, totalAmount - paidAmount);
+  const gstBreakdown = calculateGstBreakdown(
+    taxRate,
+    subtotal,
+    merchant?.gstin,
+    invoice.placeOfSupply || invoice.client?.gstin
+  );
+  const rawUpiId = merchant?.upiId || "speedytrans@okaxis";
+  const upiId = escapeHtml(rawUpiId);
+  const upiUrl = `upi://pay?pa=${rawUpiId}&pn=${encodeURIComponent(merchant?.businessName || "Merchant")}&am=${balanceDue.toFixed(2)}&cu=INR&tn=${encodeURIComponent(`Invoice ${invoice.invoiceNumber}`)}`;
+  const qrCodeDataUrl = await generateLocalQrDataUrl(upiUrl);
+  const placeOfSupplyFormatted = escapeHtml(getStateNameOrFormatted(invoice.placeOfSupply || invoice.client?.gstin?.substring(0, 2) || merchant?.gstin?.substring(0, 2)));
+  const rows = items.map(
+    (item, idx) => `
+      <tr style="border-bottom: 1px solid #e2e8f0;">
+        <td style="padding: 10px 12px; text-align: center; color: #64748b; font-size: 12px;">${idx + 1}</td>
+        <td style="padding: 10px 12px; font-weight: 600; color: #1e293b; font-size: 13px;">
+          ${escapeHtml(item.description || "Item")}
+          ${item.hsnCode ? `<div style="font-size: 11px; color: #64748b; font-weight: normal; margin-top: 2px;">HSN/SAC: <span style="font-family: monospace;">${escapeHtml(item.hsnCode)}</span></div>` : ""}
+        </td>
+        <td style="padding: 10px 12px; text-align: center; color: #334155; font-size: 12px;">${escapeHtml(item.quantity || 1)} ${escapeHtml(item.uqc || "")}</td>
+        <td style="padding: 10px 12px; text-align: right; color: #334155; font-size: 13px;">\u20B9${Number(item.rate || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+        <td style="padding: 10px 12px; text-align: right; font-weight: 700; color: #0f172a; font-size: 13px;">\u20B9${Number(item.amount || (item.quantity || 1) * (item.rate || 0)).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+      </tr>
+    `
+  ).join("");
+  const hasTransportDetails = Boolean(invoice.vehicleNumber || invoice.lrNumber || invoice.routeSource || invoice.routeDestination);
+  const escapedBusinessName = escapeHtml(merchant?.businessName || "KwikBill Merchant");
+  const escapedInvoiceNumber = escapeHtml(invoice.invoiceNumber);
+  const escapedClientName = escapeHtml(invoice.client?.name || "Customer");
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8" />
+      <title>Tax Invoice ${escapedInvoiceNumber}</title>
+      <style>
+        * { box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 24px; background: #ffffff; color: #0f172a; }
+        .invoice-box { max-width: 820px; margin: auto; border: 1px solid #cbd5e1; border-radius: 12px; padding: 28px; }
+        .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; border-bottom: 2px solid ${brandColor}; padding-bottom: 18px; }
+        .badge { display: inline-block; padding: 3px 10px; border-radius: 9999px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; }
+        .badge-paid { background: #dcfce7; color: #166534; border: 1px solid #86efac; }
+        .badge-pending { background: #fef9c3; color: #854d0e; border: 1px solid #fde047; }
+        .badge-overdue { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+      </style>
+    </head>
+    <body>
+      <div class="invoice-box">
+        <!-- Header -->
+        <div class="header">
+          <div style="display: flex; gap: 14px; align-items: flex-start;">
+            ${logoUrl ? `<img src="${logoUrl}" alt="Logo" style="width: 56px; height: 56px; object-fit: contain; border-radius: 10px; border: 1px solid #e2e8f0; padding: 2px;" />` : `<div style="width: 52px; height: 52px; border-radius: 12px; background: ${brandColor}; color: #ffffff; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 900; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">${escapeHtml((merchant?.businessName || "M").charAt(0).toUpperCase())}</div>`}
+            <div>
+              <h1 style="margin: 0; font-size: 22px; font-weight: 900; color: ${brandColor}; letter-spacing: -0.5px;">${escapedBusinessName}</h1>
+              <p style="margin: 3px 0; color: #475569; font-size: 12px; line-height: 1.4;">${escapeHtml(merchant?.address || "India")}</p>
+              ${merchant?.gstin ? `<p style="margin: 2px 0; font-size: 12px; font-weight: 700; color: #1e293b;">GSTIN: <span style="font-family: monospace; font-weight: 800; color: ${brandColor};">${escapeHtml(merchant.gstin)}</span></p>` : ""}
+              ${merchant?.phone ? `<p style="margin: 2px 0; font-size: 12px; color: #64748b;">Phone: <strong>${escapeHtml(merchant.phone)}</strong> | Email: ${escapeHtml(merchant.email || "")}</p>` : ""}
+            </div>
+          </div>
+
+          <div style="text-align: right;">
+            <div style="font-size: 18px; font-weight: 900; color: #0f172a; text-transform: uppercase; letter-spacing: 1px;">TAX INVOICE</div>
+            <div style="font-size: 14px; font-weight: 800; color: ${brandColor}; margin-top: 3px;"># ${escapedInvoiceNumber}</div>
+            <div style="margin-top: 6px;">
+              <span class="badge ${invoice.status === "paid" ? "badge-paid" : invoice.status === "overdue" ? "badge-overdue" : "badge-pending"}">
+                ${escapeHtml(invoice.status || "pending")}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Bill To & Meta Info Grid -->
+        <div style="display: flex; justify-content: space-between; margin-bottom: 20px; background: #f8fafc; padding: 14px 18px; border-radius: 10px; border: 1px solid #e2e8f0;">
+          <div style="max-width: 55%;">
+            <div style="font-size: 10px; font-weight: 800; text-transform: uppercase; color: #64748b; letter-spacing: 0.5px; margin-bottom: 4px;">BILLED TO (BUYER):</div>
+            <div style="font-size: 15px; font-weight: 800; color: #0f172a;">${escapedClientName}</div>
+            ${invoice.client?.companyName ? `<div style="font-size: 12px; font-weight: 600; color: #334155; margin-top: 2px;">${escapeHtml(invoice.client.companyName)}</div>` : ""}
+            ${invoice.client?.address ? `<div style="font-size: 12px; color: #64748b; margin-top: 2px; line-height: 1.4;">${escapeHtml(invoice.client.address)}</div>` : ""}
+            ${invoice.client?.gstin ? `<div style="font-size: 12px; font-weight: 700; color: #1e293b; margin-top: 4px;">GSTIN: <span style="font-family: monospace; color: #4f46e5;">${escapeHtml(invoice.client.gstin)}</span></div>` : ""}
+            ${invoice.client?.phone ? `<div style="font-size: 11px; color: #64748b; margin-top: 2px;">Contact: ${escapeHtml(invoice.client.phone)}</div>` : ""}
+          </div>
+
+          <div style="text-align: right; font-size: 12px; min-width: 40%;">
+            <div style="margin-bottom: 4px;"><span style="color: #64748b;">Invoice Date:</span> <strong style="color: #0f172a;">${escapeHtml(invoice.issueDate)}</strong></div>
+            <div style="margin-bottom: 4px;"><span style="color: #64748b;">Due Date:</span> <strong style="color: #dc2626;">${escapeHtml(invoice.dueDate)}</strong></div>
+            <div style="margin-bottom: 4px;"><span style="color: #64748b;">Place of Supply:</span> <strong>${placeOfSupplyFormatted}</strong></div>
+            <div><span style="color: #64748b;">Reverse Charge (RCM):</span> <strong>${invoice.isRcm ? "YES" : "NO"}</strong></div>
+          </div>
+        </div>
+
+        <!-- Optional Transport & Logistics Details -->
+        ${hasTransportDetails ? `
+          <div style="margin-bottom: 20px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 10px 14px; display: flex; flex-wrap: wrap; gap: 16px; font-size: 11px;">
+            ${invoice.vehicleNumber ? `<div><span style="color: #1e40af; font-weight: bold;">Vehicle No:</span> <strong>${escapeHtml(invoice.vehicleNumber)}</strong></div>` : ""}
+            ${invoice.lrNumber ? `<div><span style="color: #1e40af; font-weight: bold;">LR / Bilty No:</span> <strong>${escapeHtml(invoice.lrNumber)}</strong></div>` : ""}
+            ${invoice.routeSource && invoice.routeDestination ? `<div><span style="color: #1e40af; font-weight: bold;">Route:</span> <strong>${escapeHtml(invoice.routeSource)} \u2192 ${escapeHtml(invoice.routeDestination)}</strong></div>` : ""}
+            ${invoice.ewayBillNumber ? `<div><span style="color: #1e40af; font-weight: bold;">E-Way Bill:</span> <strong>${escapeHtml(invoice.ewayBillNumber)}</strong></div>` : ""}
+          </div>
+        ` : ""}
+
+        <!-- Items Table -->
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 12px;">
+          <thead>
+            <tr style="background: #f1f5f9; border-top: 1px solid #cbd5e1; border-bottom: 2px solid #94a3b8;">
+              <th style="padding: 10px 12px; text-align: center; width: 35px; font-weight: 800; color: #334155;">#</th>
+              <th style="padding: 10px 12px; text-align: left; font-weight: 800; color: #334155;">ITEM DESCRIPTION</th>
+              <th style="padding: 10px 12px; text-align: center; width: 75px; font-weight: 800; color: #334155;">QTY</th>
+              <th style="padding: 10px 12px; text-align: right; width: 110px; font-weight: 800; color: #334155;">RATE</th>
+              <th style="padding: 10px 12px; text-align: right; width: 120px; font-weight: 800; color: #334155;">AMOUNT</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows}
+          </tbody>
+        </table>
+
+        <!-- Amount In Words -->
+        <div style="margin-bottom: 20px; padding: 10px 14px; background: #f8fafc; border-left: 4px solid ${brandColor}; border-radius: 4px; font-size: 12px;">
+          <span style="color: #64748b; font-weight: 600;">Total in Words:</span>
+          <strong style="color: #0f172a; margin-left: 6px;">${numberToIndianWords(totalAmount)}</strong>
+        </div>
+
+        <!-- Footer Breakdown: QR Code + Bank Details + Financial Calculation -->
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 20px;">
+          <!-- Left: UPI QR Code & Bank Transfer Box -->
+          <div style="flex: 1; max-width: 48%;">
+            <div style="display: flex; gap: 14px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; align-items: center;">
+              ${qrCodeDataUrl ? `<img src="${qrCodeDataUrl}" alt="UPI QR" style="width: 88px; height: 88px; object-fit: contain; border-radius: 6px; border: 1px solid #e2e8f0;" />` : ""}
+              <div style="font-size: 11px; color: #475569;">
+                <div style="font-weight: 800; color: #0f172a; margin-bottom: 2px; font-size: 12px;">Instant UPI Payment</div>
+                <div>Scan with Google Pay, PhonePe, Paytm</div>
+                <div style="margin-top: 4px; font-family: monospace; font-weight: 800; color: ${brandColor}; font-size: 12px;">
+                  ${upiId}
+                </div>
+              </div>
+            </div>
+
+            ${merchant?.bankAccountNo ? `
+              <div style="margin-top: 10px; font-size: 11px; color: #475569; background: #f8fafc; padding: 8px 12px; border-radius: 6px; border: 1px solid #e2e8f0;">
+                <div><strong>Bank Name:</strong> ${escapeHtml(merchant.bankName || "Bank")}</div>
+                <div><strong>A/C No:</strong> <span style="font-family: monospace; font-weight: bold;">${escapeHtml(merchant.bankAccountNo)}</span> | <strong>IFSC:</strong> ${escapeHtml(merchant.bankIfsc || "")}</div>
+              </div>
+            ` : ""}
+
+            <div style="margin-top: 10px; font-size: 11px; color: #64748b; line-height: 1.4;">
+              <strong>Terms & Conditions:</strong><br />
+              ${escapeHtml(invoice.terms || "Payment is due within stipulated days of invoice date.")}
+            </div>
+          </div>
+
+          <!-- Right: Tax Split & Totals Table -->
+          <div style="width: 48%; font-size: 12px;">
+            <div style="display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid #f1f5f9;">
+              <span style="color: #64748b;">Taxable Subtotal:</span>
+              <span style="font-weight: 700; color: #0f172a;">\u20B9${subtotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+            </div>
+
+            ${gstBreakdown.isInterState ? `
+              <div style="display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid #f1f5f9;">
+                <span style="color: #64748b;">Integrated GST (IGST ${gstBreakdown.igstRate}%):</span>
+                <span style="font-weight: 700; color: #0f172a;">\u20B9${gstBreakdown.igstAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+              </div>
+            ` : `
+              <div style="display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid #f1f5f9;">
+                <span style="color: #64748b;">Central GST (CGST ${gstBreakdown.cgstRate}%):</span>
+                <span style="font-weight: 700; color: #0f172a;">\u20B9${gstBreakdown.cgstAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid #f1f5f9;">
+                <span style="color: #64748b;">State GST (SGST ${gstBreakdown.sgstRate}%):</span>
+                <span style="font-weight: 700; color: #0f172a;">\u20B9${gstBreakdown.sgstAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+              </div>
+            `}
+
+            ${discountAmount > 0 ? `
+              <div style="display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid #f1f5f9; color: #16a34a;">
+                <span>Discount Applied:</span>
+                <span style="font-weight: 700;">- \u20B9${discountAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+              </div>
+            ` : ""}
+
+            ${tdsAmount > 0 ? `
+              <div style="display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid #f1f5f9; color: #d97706;">
+                <span>TDS Deducted:</span>
+                <span style="font-weight: 700;">- \u20B9${tdsAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+              </div>
+            ` : ""}
+
+            <div style="display: flex; justify-content: space-between; padding: 10px 0; border-top: 2px solid #0f172a; margin-top: 6px; font-size: 16px; font-weight: 900; color: ${brandColor};">
+              <span>Total Amount:</span>
+              <span>\u20B9${totalAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+            </div>
+
+            ${paidAmount > 0 ? `
+              <div style="display: flex; justify-content: space-between; padding: 4px 0; color: #16a34a; font-size: 12px;">
+                <span>Amount Paid:</span>
+                <span style="font-weight: bold;">\u20B9${paidAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; padding: 6px 0; border-top: 1px dashed #cbd5e1; font-weight: 800; color: #dc2626; font-size: 14px;">
+                <span>Balance Due:</span>
+                <span>\u20B9${balanceDue.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+              </div>
+            ` : ""}
+
+            <!-- Authorised Signatory Box -->
+            <div style="margin-top: 24px; text-align: right; font-size: 11px; color: #64748b;">
+              <div style="font-weight: 700; color: #0f172a;">For ${escapedBusinessName}</div>
+              <div style="height: 44px;"></div>
+              <div style="border-top: 1px solid #cbd5e1; display: inline-block; padding-top: 4px; min-width: 140px; text-align: center;">
+                Authorised Signatory
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Statutory Footer -->
+        <div style="margin-top: 24px; padding-top: 12px; border-top: 1px solid #e2e8f0; font-size: 10px; color: #94a3b8; text-align: center;">
+          ${STATUTORY_INVOICE_DISCLAIMER}
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+}
+async function executePdfTool(userId, functionName, args) {
+  if (functionName !== "generate_invoice_pdf") {
+    throw new Error(`Unknown PDF tool action: ${functionName}`);
+  }
+  const { invoiceId } = args;
+  const invoice = await getInvoiceByIdService(userId, Number(invoiceId));
+  if (!invoice) return { error: `Invoice #${invoiceId} not found.` };
+  const { users: users3 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
+  const { db: db3 } = await Promise.resolve().then(() => (init_db(), db_exports));
+  const { eq: eq14 } = await import("drizzle-orm");
+  const userRows = await db3.select().from(users3).where(eq14(users3.id, userId)).limit(1);
+  const merchant = userRows[0] || {};
+  const html = await renderInvoiceHtml(invoice, merchant);
+  try {
+    const puppeteer = await getPuppeteer();
+    if (puppeteer && (puppeteer.default || puppeteer).launch) {
+      const browser = await (puppeteer.default || puppeteer).launch({
+        headless: true,
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || void 0,
+        args: [
+          "--no-sandbox",
+          "--disable-setuid-sandbox",
+          "--disable-dev-shm-usage",
+          "--disable-gpu"
+        ]
+      });
+      const page = await browser.newPage();
+      await page.setRequestInterception(true);
+      page.on("request", (interceptedReq) => {
+        const reqUrl = interceptedReq.url().toLowerCase();
+        if (reqUrl.startsWith("file:") || reqUrl.includes("169.254.169.254") || reqUrl.includes("127.0.0.1") || reqUrl.includes("localhost") || reqUrl.includes("0.0.0.0") || reqUrl.includes("10.") || reqUrl.includes("192.168.") || reqUrl.includes("172.16.")) {
+          interceptedReq.abort();
+        } else {
+          interceptedReq.continue();
+        }
+      });
+      await page.setContent(html, { waitUntil: "networkidle0" });
+      await browser.close();
+      const viewUrl = `/pay/${invoice.shareToken || invoice.invoiceNumber}`;
+      return {
+        success: true,
+        invoiceNumber: invoice.invoiceNumber,
+        pdfUrl: viewUrl,
+        message: `Invoice ${invoice.invoiceNumber} PDF generated successfully. Ready to view & print.`
+      };
+    }
+  } catch (err) {
+    console.error("Puppeteer PDF generation error:", err);
+  }
+  return {
+    success: true,
+    invoiceNumber: invoice.invoiceNumber,
+    pdfUrl: `/pay/${invoice.shareToken || invoice.invoiceNumber}`,
+    message: `Invoice ${invoice.invoiceNumber} is ready to view & print directly from your browser!`
+  };
+}
+
+// src/services/tools/index.ts
+var allToolDeclarations = [
+  ...invoiceToolDeclarations,
+  ...clientToolDeclarations,
+  ...paymentToolDeclarations,
+  ...analyticsToolDeclarations,
+  ...whatsappToolDeclarations,
+  ...pdfToolDeclarations
+];
+async function executeAgentTool(userId, toolName, args) {
+  if (invoiceToolDeclarations.some((t) => t.name === toolName)) {
+    return await executeInvoiceTool(userId, toolName, args);
+  }
+  if (clientToolDeclarations.some((t) => t.name === toolName)) {
+    return await executeClientTool(userId, toolName, args);
+  }
+  if (paymentToolDeclarations.some((t) => t.name === toolName)) {
+    return await executePaymentTool(userId, toolName, args);
+  }
+  if (analyticsToolDeclarations.some((t) => t.name === toolName)) {
+    return await executeAnalyticsTool(userId, toolName, args);
+  }
+  if (whatsappToolDeclarations.some((t) => t.name === toolName)) {
+    return await executeWhatsAppTool(userId, toolName, args);
+  }
+  if (pdfToolDeclarations.some((t) => t.name === toolName)) {
+    return await executePdfTool(userId, toolName, args);
+  }
+  throw new Error(`Tool "${toolName}" is not registered in the tool execution registry.`);
+}
+
+// src/db/conversations.ts
+init_db();
+init_schema();
+import { eq as eq13, and as and9, desc as desc8 } from "drizzle-orm";
+async function getConversationsByUserId(userId, limit = 20) {
+  try {
+    return await db.select({
+      id: aiConversations.id,
+      conversationId: aiConversations.conversationId,
+      title: aiConversations.title,
+      lastActiveAt: aiConversations.lastActiveAt,
+      createdAt: aiConversations.createdAt
+    }).from(aiConversations).where(eq13(aiConversations.userId, userId)).orderBy(desc8(aiConversations.lastActiveAt)).limit(limit);
+  } catch (error) {
+    console.error("Failed to get AI conversations:", error);
+    throw new Error("Failed to get AI conversations.", { cause: error });
+  }
+}
+async function getConversationById(userId, conversationId) {
+  try {
+    const rows = await db.select().from(aiConversations).where(and9(eq13(aiConversations.userId, userId), eq13(aiConversations.conversationId, conversationId))).limit(1);
+    if (rows.length === 0) return null;
+    return rows[0];
+  } catch (error) {
+    console.error("Failed to get conversation:", error);
+    throw new Error("Failed to get conversation.", { cause: error });
+  }
+}
+async function saveConversation(userId, conversationId, messages, title) {
+  try {
+    const existing = await getConversationById(userId, conversationId);
+    const trimmedMessages = messages.slice(-50);
+    if (existing) {
+      const updateData = {
+        messages: trimmedMessages,
+        lastActiveAt: /* @__PURE__ */ new Date(),
+        updatedAt: /* @__PURE__ */ new Date()
+      };
+      if (title && title.trim()) {
+        updateData.title = title.trim();
+      }
+      const updated = await db.update(aiConversations).set(updateData).where(and9(eq13(aiConversations.userId, userId), eq13(aiConversations.conversationId, conversationId))).returning();
+      return updated[0];
+    } else {
+      const inserted = await db.insert(aiConversations).values({
+        userId,
+        conversationId,
+        title: title || "New Conversation",
+        messages: trimmedMessages,
+        lastActiveAt: /* @__PURE__ */ new Date()
+      }).returning();
+      return inserted[0];
+    }
+  } catch (error) {
+    console.error("Failed to save AI conversation:", error);
+    throw new Error("Failed to save AI conversation.", { cause: error });
+  }
+}
+async function deleteConversation(userId, conversationId) {
+  try {
+    const deleted = await db.delete(aiConversations).where(and9(eq13(aiConversations.userId, userId), eq13(aiConversations.conversationId, conversationId))).returning();
+    return deleted[0] || null;
+  } catch (error) {
+    console.error("Failed to delete conversation:", error);
+    throw new Error("Failed to delete conversation.", { cause: error });
+  }
+}
+
+// src/services/agent.orchestrator.ts
+import { randomUUID } from "crypto";
+async function processAgentTurn(params) {
+  const { userId, userProfile, userMessage, confirmationPayload } = params;
+  const conversationId = params.conversationId || randomUUID();
+  const apiKey = config3.gemini.apiKey || process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error("GEMINI_API_KEY is not configured on the server. Please set GEMINI_API_KEY in your environment variables.");
+  }
+  const ai = new GoogleGenAI({ apiKey });
+  const now = /* @__PURE__ */ new Date();
+  const currentDateStr = now.toLocaleDateString("en-IN", {
+    weekday: "long",
+    year: "numeric",
+    month: "short",
+    day: "numeric"
+  });
+  const businessContext = {
+    userId,
+    businessName: userProfile.businessName || "My Business",
+    email: userProfile.email,
+    phone: userProfile.phone || "",
+    gstin: userProfile.gstin || "",
+    address: userProfile.address || "",
+    upiId: userProfile.upiId || "",
+    bankName: userProfile.bankName,
+    bankAccountNo: userProfile.bankAccountNo,
+    bankIfsc: userProfile.bankIfsc,
+    industryType: userProfile.industryType || "general",
+    subscriptionPlan: userProfile.subscriptionPlan || "pro_499",
+    currentDate: currentDateStr
+  };
+  const systemInstruction = buildSystemPrompt(businessContext);
+  const existingConv = await getConversationById(userId, conversationId);
+  const storedMessages = existingConv?.messages || [];
+  const contents = [];
+  for (const m of storedMessages.slice(-16)) {
+    if (m.role === "user") {
+      contents.push({
+        role: "user",
+        parts: [{ text: m.content || "" }]
+      });
+    } else if (m.role === "model") {
+      const parts = [];
+      if (m.content) {
+        parts.push({ text: m.content });
+      }
+      if (m.toolCalls && m.toolCalls.length > 0) {
+        for (const tc of m.toolCalls) {
+          parts.push({
+            functionCall: {
+              name: tc.name,
+              args: tc.args || {}
+            }
+          });
+        }
+      }
+      if (parts.length > 0) {
+        contents.push({ role: "model", parts });
+      }
+    } else if (m.role === "function" && m.toolResult) {
+      contents.push({
+        role: "user",
+        parts: [
+          {
+            functionResponse: {
+              name: m.toolResult.name,
+              response: m.toolResult.result || {}
+            }
+          }
+        ]
+      });
+    }
+  }
+  let effectiveMessage = userMessage;
+  if (confirmationPayload && confirmationPayload.actionType) {
+    effectiveMessage = `Confirmed: Proceed with ${confirmationPayload.actionType}.`;
+  }
+  contents.push({
+    role: "user",
+    parts: [{ text: effectiveMessage }]
+  });
+  const toolsUsed = [];
+  let finalResponseText = "";
+  let structuredData = null;
+  let requiresConfirmation = false;
+  let pendingConfirmationPayload = null;
+  const maxIterations = 5;
+  let iteration = 0;
+  while (iteration < maxIterations) {
+    iteration++;
+    const geminiResponse = await ai.models.generateContent({
+      model: config3.gemini.model || "gemini-3.6-flash",
+      contents,
+      config: {
+        systemInstruction,
+        temperature: 0.3,
+        tools: [
+          {
+            functionDeclarations: allToolDeclarations
+          }
+        ]
+      }
+    });
+    const candidate = geminiResponse.candidates?.[0];
+    if (!candidate || !candidate.content) {
+      finalResponseText = "I'm sorry, I couldn't process your request right now. Please try again.";
+      break;
+    }
+    const parts = candidate.content.parts || [];
+    const functionCalls = parts.filter((p) => Boolean(p.functionCall)).map((p) => p.functionCall);
+    const textParts = parts.filter((p) => Boolean(p.text)).map((p) => p.text).join("\n");
+    if (textParts) {
+      finalResponseText = textParts;
+    }
+    if (functionCalls.length === 0) {
+      break;
+    }
+    contents.push({
+      role: "model",
+      parts
+    });
+    const toolResponseParts = [];
+    for (const call of functionCalls) {
+      const toolName = call.name;
+      let toolArgs = call.args || {};
+      if (confirmationPayload && confirmationPayload.payload) {
+        toolArgs = { ...toolArgs, ...confirmationPayload.payload, confirmAction: true };
+      }
+      console.log(`[KwikBill AI Agent] Executing Tool: ${toolName} with args:`, toolArgs);
+      let toolResult;
+      try {
+        toolResult = await executeAgentTool(userId, toolName, toolArgs);
+      } catch (err) {
+        console.error(`[KwikBill AI Agent] Tool execution error (${toolName}):`, err);
+        toolResult = { error: err.message || "Tool execution failed" };
+      }
+      toolsUsed.push({
+        name: toolName,
+        args: toolArgs,
+        result: toolResult
+      });
+      if (toolResult?.invoices || toolResult?.invoiceId || toolResult?.pdfUrl || toolResult?.client || toolResult?.paymentId) {
+        structuredData = { ...structuredData || {}, ...toolResult };
+      }
+      if (toolResult?.requiresConfirmation) {
+        requiresConfirmation = true;
+        pendingConfirmationPayload = toolResult;
+      }
+      toolResponseParts.push({
+        functionResponse: {
+          name: toolName,
+          response: toolResult
+        }
+      });
+    }
+    contents.push({
+      role: "user",
+      parts: toolResponseParts
+    });
+    if (requiresConfirmation) {
+      const confirmSummaryRes = await ai.models.generateContent({
+        model: config3.gemini.model || "gemini-3.6-flash",
+        contents,
+        config: {
+          systemInstruction,
+          temperature: 0.3
+        }
+      });
+      const confirmText = confirmSummaryRes.candidates?.[0]?.content?.parts?.map((p) => p.text).join("\n");
+      if (confirmText) {
+        finalResponseText = confirmText;
+      } else if (pendingConfirmationPayload?.confirmationMessage) {
+        finalResponseText = pendingConfirmationPayload.confirmationMessage;
+      }
+      break;
+    }
+  }
+  const newMessagesToStore = [
+    ...storedMessages,
+    {
+      id: randomUUID(),
+      role: "user",
+      content: effectiveMessage,
+      createdAt: (/* @__PURE__ */ new Date()).toISOString()
+    },
+    {
+      id: randomUUID(),
+      role: "model",
+      content: finalResponseText,
+      toolCalls: toolsUsed.map((t) => ({ name: t.name, args: t.args })),
+      structuredData,
+      requiresConfirmation,
+      confirmationPayload: pendingConfirmationPayload,
+      createdAt: (/* @__PURE__ */ new Date()).toISOString()
+    }
+  ];
+  const title = storedMessages.length === 0 ? effectiveMessage.slice(0, 45) : existingConv?.title;
+  await saveConversation(userId, conversationId, newMessagesToStore, title);
+  return {
+    conversationId,
+    response: finalResponseText,
+    toolsUsed,
+    structuredData,
+    requiresConfirmation,
+    confirmationPayload: pendingConfirmationPayload
+  };
+}
+
+// src/controllers/ai.controller.ts
+var postChatMessage = asyncHandler(async (req, res) => {
+  const user = req.dbUser;
+  if (!user) {
+    throw new BadRequestError("User session not found.");
+  }
+  if (user.uid === "demo-business-owner-101") {
+    throw new ForbiddenError(
+      "KwikBill AI Agent is available only for registered, signed-in users. Please sign in with your account to use AI Agent."
+    );
+  }
+  const isSuperAdmin = user.role === "superadmin" || isSuperAdminEmail(user.email);
+  const isProPlan = user.subscriptionPlan === "pro_499";
+  const isTrialActive = user.subscriptionPlan === "trial_15_days" && user.subscriptionStatus === "trial";
+  if (!isSuperAdmin && !isProPlan && !isTrialActive) {
+    throw new ForbiddenError(
+      "KwikBill AI Agent is exclusively available on the Pro Growth Plan (\u20B9499/mo). Please upgrade your subscription to unlock intelligent AI billing automation."
+    );
+  }
+  const { message, conversationId, confirmationPayload } = req.body;
+  if ((!message || !message.trim()) && !confirmationPayload) {
+    throw new BadRequestError("Message or confirmationPayload is required.");
+  }
+  const agentResult = await processAgentTurn({
+    userId: user.id,
+    userProfile: user,
+    conversationId,
+    userMessage: (message || "").trim(),
+    confirmationPayload
+  });
+  return ApiResponse.success(res, agentResult);
+});
+var getConversationsList = asyncHandler(async (req, res) => {
+  const userId = req.dbUser.id;
+  const list = await getConversationsByUserId(userId);
+  return ApiResponse.success(res, { conversations: list });
+});
+var getConversationDetail = asyncHandler(async (req, res) => {
+  const userId = req.dbUser.id;
+  const conversationId = req.params.conversationId;
+  const conv = await getConversationById(userId, conversationId);
+  if (!conv) {
+    return ApiResponse.success(res, { conversation: null, messages: [] });
+  }
+  return ApiResponse.success(res, { conversation: conv, messages: conv.messages || [] });
+});
+var removeConversation = asyncHandler(async (req, res) => {
+  const userId = req.dbUser.id;
+  const conversationId = req.params.conversationId;
+  await deleteConversation(userId, conversationId);
+  return ApiResponse.success(res, { message: "Conversation deleted successfully." });
+});
+var getChatSuggestions = asyncHandler(async (_req, res) => {
+  return ApiResponse.success(res, { suggestions: AI_SUGGESTIONS });
+});
+
+// src/routes/ai.routes.ts
+var router9 = Router9();
+router9.use(requireAuth);
+router9.post("/chat", aiLimiter, postChatMessage);
+router9.get("/conversations", getConversationsList);
+router9.get("/conversations/:conversationId", getConversationDetail);
+router9.delete("/conversations/:conversationId", removeConversation);
+router9.get("/suggestions", getChatSuggestions);
+var ai_routes_default = router9;
 
 // src/controllers/razorpay.controller.ts
 import crypto2 from "crypto";
@@ -3025,22 +5058,34 @@ function getRazorpayInstance() {
     key_secret: keySecret
   });
 }
+var processedPaymentIds = /* @__PURE__ */ new Set();
 var createOrder = asyncHandler(async (req, res) => {
   const { amount, currency = "INR", receipt, planId, notes = {} } = req.body;
-  if (!amount || typeof amount !== "number" || amount < 100) {
-    throw new BadRequestError("Invalid amount. Minimum amount is 100 paise (\u20B91.00).");
+  let finalAmount;
+  if (planId) {
+    const authoritativePlanPrice = PLAN_PRICING[planId];
+    if (!authoritativePlanPrice) {
+      throw new BadRequestError(`Invalid subscription plan: '${planId}'.`);
+    }
+    finalAmount = authoritativePlanPrice;
+  } else {
+    if (!amount || typeof amount !== "number" || amount < 100) {
+      throw new BadRequestError("Invalid amount. Minimum amount is 100 paise (\u20B91.00).");
+    }
+    finalAmount = Math.round(amount);
   }
   const razorpay = getRazorpayInstance();
   const generatedReceipt = receipt || `rcpt_${Date.now()}_${Math.floor(Math.random() * 1e3)}`;
   const orderOptions = {
-    amount: Math.round(amount),
+    amount: finalAmount,
     currency: currency.toUpperCase(),
     receipt: generatedReceipt,
     notes: {
       ...notes,
-      planId: planId || "standard_plan",
+      planId: planId || "custom_payment",
       userId: req.dbUser?.id ? String(req.dbUser.id) : "guest",
-      email: req.user?.email || ""
+      email: req.user?.email || "",
+      expectedAmount: String(finalAmount)
     }
   };
   const order = await razorpay.orders.create(orderOptions);
@@ -3049,13 +5094,17 @@ var createOrder = asyncHandler(async (req, res) => {
     amount: order.amount,
     currency: order.currency,
     key_id: config3.razorpay.keyId,
-    receipt: order.receipt
+    receipt: order.receipt,
+    planId: planId || null
   });
 });
 var verifyPayment = asyncHandler(async (req, res) => {
   const { razorpay_order_id, razorpay_payment_id, razorpay_signature, planId } = req.body;
   if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
     throw new BadRequestError("Missing required payment verification fields (order_id, payment_id, signature).");
+  }
+  if (processedPaymentIds.has(razorpay_payment_id)) {
+    throw new BadRequestError("This payment has already been verified and processed.");
   }
   const keySecret = config3.razorpay.keySecret;
   if (!keySecret) {
@@ -3070,15 +5119,36 @@ var verifyPayment = asyncHandler(async (req, res) => {
     console.warn(`[Razorpay Signature Mismatch] Order: ${razorpay_order_id}, Payment: ${razorpay_payment_id}`);
     throw new BadRequestError("Payment verification failed. Signature mismatch.");
   }
+  const razorpay = getRazorpayInstance();
+  let verifiedPlanId = planId;
+  try {
+    const fetchedOrder = await razorpay.orders.fetch(razorpay_order_id);
+    const orderPlanId = fetchedOrder?.notes?.planId;
+    if (orderPlanId && orderPlanId !== "custom_payment") {
+      const requiredPrice = PLAN_PRICING[orderPlanId];
+      if (requiredPrice && fetchedOrder.amount < requiredPrice) {
+        throw new BadRequestError("Payment amount does not match the price for the requested subscription plan.");
+      }
+      verifiedPlanId = orderPlanId;
+    }
+  } catch (fetchErr) {
+    if (fetchErr instanceof BadRequestError) throw fetchErr;
+    console.warn("[Razorpay Order Fetch Warning]:", fetchErr?.message || fetchErr);
+  }
+  processedPaymentIds.add(razorpay_payment_id);
+  if (processedPaymentIds.size > 5e3) {
+    const firstKey = processedPaymentIds.values().next().value;
+    if (firstKey) processedPaymentIds.delete(firstKey);
+  }
   let updatedUser = null;
-  if (req.dbUser?.id && planId) {
+  if (req.dbUser?.id && verifiedPlanId && PLAN_PRICING[verifiedPlanId]) {
     try {
-      updatedUser = await updateTenantSubscription(req.dbUser.id, planId, "active");
+      updatedUser = await updateTenantSubscription(req.dbUser.id, verifiedPlanId, "active");
       await Promise.all([
         invalidateUserCache(req.dbUser.id, "profile"),
         invalidateAdminCache("tenants")
       ]);
-      console.log(`[Subscription Upgraded] User ${req.dbUser.id} upgraded to ${planId}`);
+      console.log(`[Subscription Upgraded] User ${req.dbUser.id} securely upgraded to ${verifiedPlanId}`);
     } catch (dbErr) {
       console.error("[Subscription DB Update Error]:", dbErr);
     }
@@ -3087,13 +5157,13 @@ var verifyPayment = asyncHandler(async (req, res) => {
     message: "Payment verified successfully",
     payment_id: razorpay_payment_id,
     order_id: razorpay_order_id,
-    planId: planId || null,
+    planId: verifiedPlanId || null,
     user: updatedUser || null
   });
 });
 
 // src/routes/index.ts
-var apiRouter = Router9();
+var apiRouter = Router10();
 apiRouter.use(generalApiLimiter);
 apiRouter.get("/health", (req, res) => {
   res.json({
@@ -3107,6 +5177,7 @@ apiRouter.post("/verify-payment", requireAuth, checkoutLimiter, verifyPayment);
 apiRouter.post("/razorpay/create-order", requireAuth, checkoutLimiter, createOrder);
 apiRouter.post("/razorpay/verify-payment", requireAuth, checkoutLimiter, verifyPayment);
 apiRouter.use("/user", user_routes_default);
+apiRouter.use("/ai", ai_routes_default);
 apiRouter.use("/clients", clients_routes_default);
 apiRouter.use("/invoices", invoices_routes_default);
 apiRouter.use("/payments", payments_routes_default);
@@ -3118,6 +5189,7 @@ apiRouter.use(globalErrorHandler);
 var routes_default = apiRouter;
 
 // src/db/init.ts
+init_db();
 async function initializeDatabase() {
   const pool2 = createPool();
   try {
@@ -3294,6 +5366,18 @@ async function initializeDatabase() {
       );
     `);
     await pool2.query(`
+      CREATE TABLE IF NOT EXISTS ai_conversations (
+        id SERIAL PRIMARY KEY,
+        conversation_id TEXT NOT NULL UNIQUE,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE NOT NULL,
+        title TEXT NOT NULL DEFAULT 'New Conversation',
+        messages JSONB NOT NULL DEFAULT '[]'::jsonb,
+        last_active_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    await pool2.query(`
       CREATE INDEX IF NOT EXISTS idx_invoices_user_id ON invoices(user_id);
       CREATE INDEX IF NOT EXISTS idx_invoices_client_id ON invoices(client_id);
       CREATE INDEX IF NOT EXISTS idx_invoices_status ON invoices(status);
@@ -3306,6 +5390,8 @@ async function initializeDatabase() {
       CREATE INDEX IF NOT EXISTS idx_reminder_logs_invoice_id ON reminder_logs(invoice_id);
       CREATE INDEX IF NOT EXISTS idx_recurring_profiles_user_id ON recurring_profiles(user_id);
       CREATE INDEX IF NOT EXISTS idx_recurring_profiles_next_run ON recurring_profiles(next_run_date, is_active);
+      CREATE INDEX IF NOT EXISTS idx_ai_conversations_user_id ON ai_conversations(user_id);
+      CREATE INDEX IF NOT EXISTS idx_ai_conversations_conv_id ON ai_conversations(conversation_id);
     `);
     console.log("Database tables & performance indexes verified / initialized successfully.");
   } catch (err) {
@@ -3332,10 +5418,15 @@ app.use((req, res, next) => {
   next();
 });
 app.use((req, res, next) => {
+  const origin = req.headers.origin || "*";
+  res.setHeader("Access-Control-Allow-Origin", origin);
   res.setHeader("Access-Control-Allow-Credentials", "true");
-  res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "SAMEORIGIN");
+  res.setHeader("X-XSS-Protection", "1; mode=block");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
   if (req.method === "OPTIONS") {
     return res.status(200).end();
   }

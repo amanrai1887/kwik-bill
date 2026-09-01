@@ -24,6 +24,12 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
     'Content-Type': 'application/json',
   };
 
+  try {
+    if (typeof auth.authStateReady === 'function') {
+      await auth.authStateReady();
+    }
+  } catch {}
+
   const currentUser = auth.currentUser;
   if (currentUser) {
     try {
@@ -365,3 +371,44 @@ export async function verifyRazorpayPaymentApi(payload: {
     body: JSON.stringify(payload),
   });
 }
+
+// AI Agent Endpoints
+export async function sendAIChatMessage(data: {
+  message?: string;
+  conversationId?: string;
+  confirmationPayload?: any;
+}) {
+  return request<{
+    success: boolean;
+    conversationId: string;
+    response: string;
+    toolsUsed: Array<{ name: string; args: any; result: any }>;
+    structuredData?: any;
+    requiresConfirmation?: boolean;
+    confirmationPayload?: any;
+  }>('/api/ai/chat', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function fetchAIConversations() {
+  return request<{ success: boolean; conversations: any[] }>('/api/ai/conversations');
+}
+
+export async function fetchAIConversationDetail(conversationId: string) {
+  return request<{ success: boolean; conversation: any; messages: any[] }>(
+    `/api/ai/conversations/${conversationId}`
+  );
+}
+
+export async function deleteAIConversation(conversationId: string) {
+  return request<{ success: boolean; message: string }>(`/api/ai/conversations/${conversationId}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function fetchAISuggestions() {
+  return request<{ success: boolean; suggestions: string[] }>('/api/ai/suggestions');
+}
+

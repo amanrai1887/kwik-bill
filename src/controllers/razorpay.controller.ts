@@ -3,7 +3,7 @@ import crypto from "crypto";
 import Razorpay from "razorpay";
 import { AuthRequest } from "../middleware/auth.ts";
 import { updateTenantSubscription } from "../db/users.ts";
-import { config } from "../config/app.config.ts";
+import { config, PLAN_PRICING } from "../config/app.config.ts";
 import { asyncHandler, ApiResponse, BadRequestError, ApiError } from "../utils/apiResponse.ts";
 import { invalidateUserCache, invalidateAdminCache } from "../lib/redis.ts";
 
@@ -21,6 +21,9 @@ function getRazorpayInstance() {
   });
 }
 
+// Track processed payments in-memory to prevent replay attacks on webhook/verify
+const processedPaymentIds = new Set<string>();
+
 /**
  * STEP 1: BACKEND - Create Order
  * POST /api/create-order
@@ -28,23 +31,36 @@ function getRazorpayInstance() {
 export const createOrder = asyncHandler(async (req: AuthRequest, res: Response) => {
   const { amount, currency = "INR", receipt, planId, notes = {} } = req.body;
 
-  // Validate amount (must be >= 100 paise = 1 INR)
-  if (!amount || typeof amount !== "number" || amount < 100) {
-    throw new BadRequestError("Invalid amount. Minimum amount is 100 paise (₹1.00).");
+  let finalAmount: number;
+
+  // STRICT SERVER-SIDE PRICING: If upgrading to a subscription plan, amount MUST come from PLAN_PRICING
+  if (planId) {
+    const authoritativePlanPrice = PLAN_PRICING[planId];
+    if (!authoritativePlanPrice) {
+      throw new BadRequestError(`Invalid subscription plan: '${planId}'.`);
+    }
+    finalAmount = authoritativePlanPrice;
+  } else {
+    // Custom invoice / one-off payment
+    if (!amount || typeof amount !== "number" || amount < 100) {
+      throw new BadRequestError("Invalid amount. Minimum amount is 100 paise (₹1.00).");
+    }
+    finalAmount = Math.round(amount);
   }
 
   const razorpay = getRazorpayInstance();
   const generatedReceipt = receipt || `rcpt_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
 
   const orderOptions = {
-    amount: Math.round(amount),
+    amount: finalAmount,
     currency: currency.toUpperCase(),
     receipt: generatedReceipt,
     notes: {
       ...notes,
-      planId: planId || "standard_plan",
+      planId: planId || "custom_payment",
       userId: req.dbUser?.id ? String(req.dbUser.id) : "guest",
       email: req.user?.email || "",
+      expectedAmount: String(finalAmount),
     },
   };
 
@@ -56,11 +72,12 @@ export const createOrder = asyncHandler(async (req: AuthRequest, res: Response) 
     currency: order.currency,
     key_id: config.razorpay.keyId,
     receipt: order.receipt,
+    planId: planId || null,
   });
 });
 
 /**
- * STEP 3: BACKEND - Verify Signature
+ * STEP 3: BACKEND - Verify Signature & Activate Subscription
  * POST /api/verify-payment
  */
 export const verifyPayment = asyncHandler(async (req: AuthRequest, res: Response) => {
@@ -68,6 +85,11 @@ export const verifyPayment = asyncHandler(async (req: AuthRequest, res: Response
 
   if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
     throw new BadRequestError("Missing required payment verification fields (order_id, payment_id, signature).");
+  }
+
+  // Replay Attack Protection: Ensure payment ID hasn't been verified before
+  if (processedPaymentIds.has(razorpay_payment_id)) {
+    throw new BadRequestError("This payment has already been verified and processed.");
   }
 
   const keySecret = config.razorpay.keySecret;
@@ -94,16 +116,44 @@ export const verifyPayment = asyncHandler(async (req: AuthRequest, res: Response
     throw new BadRequestError("Payment verification failed. Signature mismatch.");
   }
 
-  // If user is authenticated and planId is passed, upgrade the user's subscription
+  const razorpay = getRazorpayInstance();
+  let verifiedPlanId = planId;
+
+  // Server-side verification of Razorpay Order metadata and amount
+  try {
+    const fetchedOrder: any = await razorpay.orders.fetch(razorpay_order_id);
+    const orderPlanId = fetchedOrder?.notes?.planId;
+
+    if (orderPlanId && orderPlanId !== "custom_payment") {
+      const requiredPrice = PLAN_PRICING[orderPlanId];
+      if (requiredPrice && fetchedOrder.amount < requiredPrice) {
+        throw new BadRequestError("Payment amount does not match the price for the requested subscription plan.");
+      }
+      verifiedPlanId = orderPlanId;
+    }
+  } catch (fetchErr: any) {
+    if (fetchErr instanceof BadRequestError) throw fetchErr;
+    console.warn("[Razorpay Order Fetch Warning]:", fetchErr?.message || fetchErr);
+  }
+
+  // Mark payment ID as processed
+  processedPaymentIds.add(razorpay_payment_id);
+  // Keep memory bound (max 5000 ids)
+  if (processedPaymentIds.size > 5000) {
+    const firstKey = processedPaymentIds.values().next().value;
+    if (firstKey) processedPaymentIds.delete(firstKey);
+  }
+
+  // If user is authenticated and plan is valid, upgrade the user's subscription
   let updatedUser = null;
-  if (req.dbUser?.id && planId) {
+  if (req.dbUser?.id && verifiedPlanId && PLAN_PRICING[verifiedPlanId]) {
     try {
-      updatedUser = await updateTenantSubscription(req.dbUser.id, planId, "active");
+      updatedUser = await updateTenantSubscription(req.dbUser.id, verifiedPlanId, "active");
       await Promise.all([
         invalidateUserCache(req.dbUser.id, 'profile'),
         invalidateAdminCache('tenants'),
       ]);
-      console.log(`[Subscription Upgraded] User ${req.dbUser.id} upgraded to ${planId}`);
+      console.log(`[Subscription Upgraded] User ${req.dbUser.id} securely upgraded to ${verifiedPlanId}`);
     } catch (dbErr) {
       console.error("[Subscription DB Update Error]:", dbErr);
     }
@@ -113,7 +163,8 @@ export const verifyPayment = asyncHandler(async (req: AuthRequest, res: Response
     message: "Payment verified successfully",
     payment_id: razorpay_payment_id,
     order_id: razorpay_order_id,
-    planId: planId || null,
+    planId: verifiedPlanId || null,
     user: updatedUser || null,
   });
 });
+

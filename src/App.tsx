@@ -19,6 +19,8 @@ import { PaymentRecordModal } from './components/PaymentRecordModal.tsx';
 import { ClientModal } from './components/ClientModal.tsx';
 import { PlanSelectionModal } from './components/PlanSelectionModal.tsx';
 import { ShortcutsModal } from './components/ShortcutsModal.tsx';
+import { AIChatFAB } from './components/AIChatFAB.tsx';
+import { AIChatPanel } from './components/AIChatPanel.tsx';
 import { SkeletonCard, SkeletonTable } from './components/SkeletonLoader.tsx';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts.ts';
 
@@ -77,6 +79,7 @@ function AppContent() {
   const [isCreateInvoiceOpen, setIsCreateInvoiceOpen] = useState(false);
   const [isClientModalOpen, setIsClientModalOpen] = useState(false);
   const [isShortcutsModalOpen, setIsShortcutsModalOpen] = useState(false);
+  const [isAIChatOpen, setIsAIChatOpen] = useState(false);
   const [clientToEdit, setClientToEdit] = useState<Client | null>(null);
   const [selectedInvoiceForDetail, setSelectedInvoiceForDetail] = useState<Invoice | null>(null);
   const [selectedInvoiceForWhatsApp, setSelectedInvoiceForWhatsApp] = useState<Invoice | null>(null);
@@ -99,10 +102,14 @@ function AppContent() {
       }
     },
     onToggleShortcutsModal: () => setIsShortcutsModalOpen((prev) => !prev),
+    onToggleAIChat: () => {
+      if (currentView === 'app') setIsAIChatOpen((prev) => !prev);
+    },
     onCloseModals: () => {
       setIsCreateInvoiceOpen(false);
       setIsClientModalOpen(false);
       setIsShortcutsModalOpen(false);
+      setIsAIChatOpen(false);
       setSelectedInvoiceForDetail(null);
       setSelectedInvoiceForWhatsApp(null);
       setSelectedInvoiceForPayment(null);
@@ -224,36 +231,36 @@ function AppContent() {
       const loadedProfile = profileRes?.user || profileRes?.data?.user || (profileRes?.id ? profileRes : null);
       if (loadedProfile) {
         setProfile(loadedProfile);
-        try { localStorage.setItem('kwikbill_cached_profile', JSON.stringify(loadedProfile)); } catch {}
+        try { localStorage.setItem('kwikbill_cached_profile', JSON.stringify(loadedProfile)); } catch { }
       }
 
       if (Array.isArray(clientsRes?.clients)) {
         setClients(clientsRes.clients);
-        try { localStorage.setItem('kwikbill_cached_clients', JSON.stringify(clientsRes.clients)); } catch {}
+        try { localStorage.setItem('kwikbill_cached_clients', JSON.stringify(clientsRes.clients)); } catch { }
       } else if (Array.isArray(clientsRes)) {
         setClients(clientsRes);
-        try { localStorage.setItem('kwikbill_cached_clients', JSON.stringify(clientsRes)); } catch {}
+        try { localStorage.setItem('kwikbill_cached_clients', JSON.stringify(clientsRes)); } catch { }
       }
 
       if (Array.isArray(invoicesRes?.invoices)) {
         setInvoices(invoicesRes.invoices);
-        try { localStorage.setItem('kwikbill_cached_invoices', JSON.stringify(invoicesRes.invoices)); } catch {}
+        try { localStorage.setItem('kwikbill_cached_invoices', JSON.stringify(invoicesRes.invoices)); } catch { }
       } else if (Array.isArray(invoicesRes)) {
         setInvoices(invoicesRes);
-        try { localStorage.setItem('kwikbill_cached_invoices', JSON.stringify(invoicesRes)); } catch {}
+        try { localStorage.setItem('kwikbill_cached_invoices', JSON.stringify(invoicesRes)); } catch { }
       }
 
       if (analyticsRes) {
         setAnalytics(analyticsRes);
-        try { localStorage.setItem('kwikbill_cached_analytics', JSON.stringify(analyticsRes)); } catch {}
+        try { localStorage.setItem('kwikbill_cached_analytics', JSON.stringify(analyticsRes)); } catch { }
       }
 
       if (Array.isArray(logsRes?.logs)) {
         setReminderLogs(logsRes.logs);
-        try { localStorage.setItem('kwikbill_cached_logs', JSON.stringify(logsRes.logs)); } catch {}
+        try { localStorage.setItem('kwikbill_cached_logs', JSON.stringify(logsRes.logs)); } catch { }
       } else if (Array.isArray(logsRes)) {
         setReminderLogs(logsRes);
-        try { localStorage.setItem('kwikbill_cached_logs', JSON.stringify(logsRes)); } catch {}
+        try { localStorage.setItem('kwikbill_cached_logs', JSON.stringify(logsRes)); } catch { }
       }
 
       return loadedProfile;
@@ -266,10 +273,11 @@ function AppContent() {
   }, []);
 
   useEffect(() => {
+    if (loading) return; // Wait until Firebase finishes resolving initial auth session
     if (currentView === 'app') {
       loadAllData();
     }
-  }, [loadAllData, currentView]);
+  }, [loadAllData, currentView, loading, user]);
 
   // Re-verify profile when tab comes into focus
   useEffect(() => {
@@ -831,6 +839,30 @@ function AppContent() {
       <ShortcutsModal
         isOpen={isShortcutsModalOpen}
         onClose={() => setIsShortcutsModalOpen(false)}
+      />
+
+      {/* 7. KwikBill AI Agent Floating Action Button */}
+      {currentView === 'app' && (
+        <AIChatFAB
+          onClick={() => setIsAIChatOpen(true)}
+          isOpen={isAIChatOpen}
+          isPro={Boolean(profile?.subscriptionPlan === 'pro_499' || profile?.role === 'superadmin')}
+        />
+      )}
+
+      {/* 8. KwikBill AI Agent Sliding Chat Panel */}
+      <AIChatPanel
+        isOpen={isAIChatOpen}
+        onClose={() => setIsAIChatOpen(false)}
+        currentUser={profile}
+        isDemoUser={!user || profile?.uid === 'demo-business-owner-101'}
+        onOpenLoginModal={() => setIsLoginModalOpen(true)}
+        onOpenUpgradeModal={() => setIsPlanModalOpen(true)}
+        onViewInvoice={(id) => {
+          const inv = invoices.find((i) => i.id === id);
+          if (inv) setSelectedInvoiceForDetail(inv);
+        }}
+        onOpenWhatsAppModal={(inv) => setSelectedInvoiceForWhatsApp(inv)}
       />
     </div>
   );

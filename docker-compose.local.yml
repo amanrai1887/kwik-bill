@@ -20,12 +20,14 @@ services:
       - RAZORPAY_KEY_ID=${RAZORPAY_KEY_ID:-rzp_test_TReZcmt9KLYGJB}
       - RAZORPAY_KEY_SECRET=${RAZORPAY_KEY_SECRET:-7FStZMDU6584xYp6O0Zav65d}
       - VITE_RAZORPAY_KEY_ID=${VITE_RAZORPAY_KEY_ID:-rzp_test_TReZcmt9KLYGJB}
-      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-AQ.Ab8RN6JyAIcqKi4sKTwSwYCmNc47Brds2opA_RT6ooSvaA9DAA}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-3.6-flash}
       - META_WHATSAPP_TOKEN=${META_WHATSAPP_TOKEN:-}
       - META_PHONE_NUMBER_ID=${META_PHONE_NUMBER_ID:-}
       - APP_URL=${APP_URL:-http://localhost:3000}
       - FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID:-invoice-saas-app-fc503}
       - REDIS_URL=redis://redis:6379
+      - REDIS_ENABLED=false
     depends_on:
       postgres:
         condition: service_healthy
@@ -45,7 +47,7 @@ services:
     volumes:
       - invoice_db_local_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d invoice_saas"]
+      test: [ "CMD-SHELL", "pg_isready -U postgres -d invoice_saas" ]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -59,7 +61,7 @@ services:
     volumes:
       - invoice_redis_local_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 5s
       timeout: 5s
       retries: 5

@@ -6,6 +6,7 @@ interface ShortcutOptions {
   onSearchFocus?: () => void;
   onToggleShortcutsModal?: () => void;
   onCloseModals?: () => void;
+  onToggleAIChat?: () => void;
 }
 
 export const useKeyboardShortcuts = ({
@@ -14,9 +15,17 @@ export const useKeyboardShortcuts = ({
   onSearchFocus,
   onToggleShortcutsModal,
   onCloseModals,
+  onToggleAIChat,
 }: ShortcutOptions) => {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // ⌘+K or Ctrl+K triggers AI chat anywhere
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        if (onToggleAIChat) onToggleAIChat();
+        return;
+      }
+
       // Don't trigger shortcuts if user is typing in an input / textarea / select
       const activeTag = (document.activeElement?.tagName || '').toLowerCase();
       const isInputActive = activeTag === 'input' || activeTag === 'textarea' || activeTag === 'select';
